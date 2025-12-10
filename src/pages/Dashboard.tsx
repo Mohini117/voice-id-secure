@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +9,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Fingerprint, Shield, CheckCircle2, XCircle, LogOut, Mic } from 'lucide-react';
+import { 
+  Loader2, Fingerprint, Shield, CheckCircle2, XCircle, LogOut, Mic, 
+  User, Mail, Phone, ArrowLeft, Sparkles, RefreshCw 
+} from 'lucide-react';
 
 type VoiceProfile = {
   id: string;
@@ -59,7 +62,6 @@ export default function Dashboard() {
     if (!user) return;
 
     try {
-      // Fetch user profile
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -70,7 +72,6 @@ export default function Dashboard() {
         setProfile(profileData);
       }
 
-      // Fetch voice profile
       const { data: voiceData } = await supabase
         .from('voice_profiles')
         .select('*')
@@ -79,7 +80,6 @@ export default function Dashboard() {
 
       if (voiceData) {
         setVoiceProfile(voiceData);
-        // Load stored signature from azure_profile_id (we store signature as JSON)
         try {
           const sig = JSON.parse(voiceData.azure_profile_id);
           setStoredSignature(sig);
@@ -122,7 +122,6 @@ export default function Dashboard() {
     setIsEnrolling(true);
 
     try {
-      // Average all samples to create final signature
       const numCoeffs = samples[0].length;
       const finalSignature = new Array(numCoeffs).fill(0);
       
@@ -136,7 +135,6 @@ export default function Dashboard() {
         finalSignature[i] /= samples.length;
       }
 
-      // Store in database
       const { error } = await supabase
         .from('voice_profiles')
         .upsert({
@@ -152,7 +150,6 @@ export default function Dashboard() {
       setVoiceProfile(prev => prev ? { ...prev, enrollment_status: 'enrolled' } : null);
       setEnrollmentSamples([]);
 
-      // Log enrollment
       await supabase.from('auth_logs').insert({
         user_id: user.id,
         auth_method: 'voice_enrollment',
@@ -178,6 +175,12 @@ export default function Dashboard() {
     }
   };
 
+  const handleReEnroll = () => {
+    setStoredSignature(null);
+    setEnrollmentSamples([]);
+    setVoiceProfile(prev => prev ? { ...prev, enrollment_status: 'pending' } : null);
+  };
+
   const handleVerificationRecording = async () => {
     if (recorderState.isRecording) {
       setIsVerifying(true);
@@ -191,7 +194,6 @@ export default function Dashboard() {
       const result = verifyAgainst(audioData, storedSignature, 0.80);
       setVerificationResult(result);
 
-      // Log verification attempt
       await supabase.from('auth_logs').insert({
         user_id: user?.id,
         auth_method: 'voice_verification',
@@ -226,8 +228,11 @@ export default function Dashboard() {
 
   if (loading || fetchingProfile) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="relative">
+          <div className="absolute inset-0 bg-primary/30 blur-xl rounded-full" />
+          <Loader2 className="w-10 h-10 animate-spin text-primary relative" />
+        </div>
       </div>
     );
   }
@@ -235,174 +240,252 @@ export default function Dashboard() {
   const isEnrolled = voiceProfile?.enrollment_status === 'enrolled' && storedSignature;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/50 p-4">
-      <div className="max-w-2xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Fingerprint className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold">VoiceAuth</h1>
-              <p className="text-sm text-muted-foreground">{profile?.full_name || user?.email}</p>
-            </div>
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="fixed inset-0 cyber-grid opacity-10" />
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-primary/15 rounded-full blur-[150px]" />
+        <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-secondary/10 rounded-full blur-[120px]" />
+      </div>
+
+      <div className="relative z-10 p-4 md:p-6">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-3 group">
+              <div className="relative">
+                <div className="absolute inset-0 bg-primary/30 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                  <Fingerprint className="w-6 h-6 text-primary-foreground" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gradient">VoiceAuth</h1>
+                <p className="text-sm text-muted-foreground">{profile?.full_name || user?.email}</p>
+              </div>
+            </Link>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleSignOut}
+              className="hover:bg-destructive/10 hover:text-destructive"
+            >
+              <LogOut className="w-5 h-5" />
+            </Button>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleSignOut}>
-            <LogOut className="w-5 h-5" />
-          </Button>
-        </div>
 
-        {/* Voice Profile Status */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                Voice Profile
-              </CardTitle>
-              <Badge variant={isEnrolled ? "default" : "secondary"}>
-                {isEnrolled ? "Enrolled" : "Not Enrolled"}
-              </Badge>
-            </div>
-            <CardDescription>
-              {isEnrolled
-                ? "Your voice signature is ready for authentication."
-                : `Record ${REQUIRED_SAMPLES} voice samples to enroll.`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!isEnrolled ? (
-              <div className="space-y-4">
-                <div className="flex gap-2 justify-center mb-4">
-                  {Array.from({ length: REQUIRED_SAMPLES }).map((_, i) => (
-                    <div
-                      key={i}
-                      className={`w-3 h-3 rounded-full ${
-                        i < enrollmentSamples.length
-                          ? 'bg-primary'
-                          : 'bg-muted'
-                      }`}
-                    />
-                  ))}
+          {/* User Info Card */}
+          <Card className="glass-card border-border/50">
+            <CardContent className="pt-6">
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <User className="w-4 h-4" />
+                  {profile?.full_name}
                 </div>
-                <VoiceRecorder
-                  isRecording={recorderState.isRecording}
-                  isProcessing={recorderState.isProcessing || isEnrolling}
-                  audioLevel={recorderState.audioLevel}
-                  onStart={handleEnrollmentRecording}
-                  onStop={handleEnrollmentRecording}
-                  minDuration={3}
-                  maxDuration={8}
-                />
-                <p className="text-center text-sm text-muted-foreground">
-                  Say a phrase naturally (e.g., "My voice is my password")
-                </p>
-              </div>
-            ) : (
-              <div className="text-center space-y-2">
-                <CheckCircle2 className="w-12 h-12 text-primary mx-auto" />
-                <p className="text-sm text-muted-foreground">
-                  {voiceProfile?.samples_collected} samples collected
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Voice Verification */}
-        {isEnrolled && !showOTP && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mic className="w-5 h-5" />
-                Voice Verification
-              </CardTitle>
-              <CardDescription>
-                Verify your identity using your voice.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <VoiceRecorder
-                isRecording={recorderState.isRecording}
-                isProcessing={recorderState.isProcessing || isVerifying}
-                audioLevel={recorderState.audioLevel}
-                onStart={handleVerificationRecording}
-                onStop={handleVerificationRecording}
-                minDuration={2}
-                maxDuration={6}
-              />
-
-              {verificationResult && (
-                <div className={`p-4 rounded-lg ${
-                  verificationResult.match 
-                    ? 'bg-primary/10 border border-primary/20' 
-                    : 'bg-destructive/10 border border-destructive/20'
-                }`}>
-                  <div className="flex items-center gap-3">
-                    {verificationResult.match ? (
-                      <CheckCircle2 className="w-6 h-6 text-primary" />
-                    ) : (
-                      <XCircle className="w-6 h-6 text-destructive" />
-                    )}
-                    <div>
-                      <p className="font-medium">
-                        {verificationResult.match ? 'Voice Matched!' : 'Voice Not Recognized'}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Confidence: {(verificationResult.confidence * 100).toFixed(1)}%
-                      </p>
-                    </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Mail className="w-4 h-4" />
+                  {profile?.email}
+                </div>
+                {profile?.phone && profile.phone.trim() && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Phone className="w-4 h-4" />
+                    {profile.phone}
                   </div>
-                </div>
-              )}
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowOTP(true)}
-              >
-                Use OTP Instead
-              </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
-        )}
 
-        {/* OTP Fallback */}
-        {showOTP && profile && (
-          <Card>
+          {/* Voice Profile Status */}
+          <Card className="glass-card border-border/50">
             <CardHeader>
-              <CardTitle>OTP Verification</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-primary" />
+                  Voice Profile
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  {isEnrolled && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleReEnroll}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Re-enroll
+                    </Button>
+                  )}
+                  <Badge 
+                    variant={isEnrolled ? "default" : "secondary"}
+                    className={isEnrolled ? "bg-gradient-to-r from-primary to-accent" : ""}
+                  >
+                    {isEnrolled ? "Enrolled" : "Not Enrolled"}
+                  </Badge>
+                </div>
+              </div>
               <CardDescription>
-                Verify your identity with a one-time code.
+                {isEnrolled
+                  ? "Your voice signature is ready for authentication."
+                  : `Record ${REQUIRED_SAMPLES} voice samples to enroll your unique voice signature.`}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <OTPInput
-                userId={user!.id}
-                email={profile.email}
-                phone={profile.phone}
-                onVerified={() => {
-                  setShowOTP(false);
-                  toast({
-                    title: 'Authenticated!',
-                    description: 'OTP verification successful.',
-                  });
-                }}
-                onBack={() => setShowOTP(false)}
-              />
+              {!isEnrolled ? (
+                <div className="space-y-6">
+                  {/* Progress Indicators */}
+                  <div className="flex items-center justify-center gap-3 mb-6">
+                    {Array.from({ length: REQUIRED_SAMPLES }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`relative w-4 h-4 rounded-full transition-all duration-300 ${
+                          i < enrollmentSamples.length
+                            ? 'bg-gradient-to-r from-primary to-accent shadow-lg'
+                            : 'bg-muted'
+                        }`}
+                      >
+                        {i < enrollmentSamples.length && (
+                          <div className="absolute inset-0 rounded-full bg-primary animate-ping opacity-30" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <VoiceRecorder
+                    isRecording={recorderState.isRecording}
+                    isProcessing={recorderState.isProcessing || isEnrolling}
+                    audioLevel={recorderState.audioLevel}
+                    onStart={handleEnrollmentRecording}
+                    onStop={handleEnrollmentRecording}
+                    minDuration={3}
+                    maxDuration={8}
+                  />
+                  
+                  <p className="text-center text-sm text-muted-foreground">
+                    Say a natural phrase like <span className="text-foreground font-medium">"My voice is my password"</span>
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center space-y-4 py-4">
+                  <div className="relative inline-block">
+                    <div className="absolute inset-0 bg-primary/30 blur-xl rounded-full" />
+                    <div className="relative w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center border border-primary/30">
+                      <CheckCircle2 className="w-10 h-10 text-primary" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-foreground font-medium">Voice Enrolled</p>
+                    <p className="text-sm text-muted-foreground">
+                      {voiceProfile?.samples_collected} samples collected
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
-        )}
 
-        {/* Error Display */}
-        {recorderState.error && (
-          <Card className="border-destructive">
-            <CardContent className="pt-6">
-              <p className="text-destructive text-sm">{recorderState.error}</p>
-            </CardContent>
-          </Card>
-        )}
+          {/* Voice Verification */}
+          {isEnrolled && !showOTP && (
+            <Card className="glass-card border-border/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mic className="w-5 h-5 text-secondary" />
+                  Voice Verification
+                </CardTitle>
+                <CardDescription>
+                  Verify your identity using your unique voice signature.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <VoiceRecorder
+                  isRecording={recorderState.isRecording}
+                  isProcessing={recorderState.isProcessing || isVerifying}
+                  audioLevel={recorderState.audioLevel}
+                  onStart={handleVerificationRecording}
+                  onStop={handleVerificationRecording}
+                  minDuration={2}
+                  maxDuration={6}
+                />
+
+                {verificationResult && (
+                  <div className={`p-5 rounded-xl transition-all ${
+                    verificationResult.match 
+                      ? 'bg-primary/10 border border-primary/30 success-glow' 
+                      : 'bg-destructive/10 border border-destructive/30 error-glow'
+                  }`}>
+                    <div className="flex items-center gap-4">
+                      {verificationResult.match ? (
+                        <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                          <CheckCircle2 className="w-6 h-6 text-primary" />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-destructive/20 flex items-center justify-center">
+                          <XCircle className="w-6 h-6 text-destructive" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-lg">
+                          {verificationResult.match ? 'Voice Matched!' : 'Voice Not Recognized'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Confidence: {(verificationResult.confidence * 100).toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  variant="outline"
+                  className="w-full border-border/50 hover:bg-muted/50 hover:border-accent"
+                  onClick={() => setShowOTP(true)}
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Use OTP Verification Instead
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* OTP Fallback */}
+          {showOTP && profile && (
+            <Card className="glass-card border-border/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-accent" />
+                  OTP Verification
+                </CardTitle>
+                <CardDescription>
+                  Verify your identity with a one-time code.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <OTPInput
+                  userId={user!.id}
+                  email={profile.email}
+                  phone={profile.phone}
+                  onVerified={() => {
+                    setShowOTP(false);
+                    toast({
+                      title: 'Authenticated!',
+                      description: 'OTP verification successful.',
+                    });
+                  }}
+                  onBack={() => setShowOTP(false)}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Error Display */}
+          {recorderState.error && (
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardContent className="pt-6">
+                <p className="text-destructive text-sm">{recorderState.error}</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );

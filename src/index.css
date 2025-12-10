@@ -1,96 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Cyberpunk Voice Auth Design System */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 270 95% 65%;
+    --primary-foreground: 222 47% 6%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 180 85% 45%;
+    --secondary-foreground: 222 47% 6%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 222 47% 12%;
+    --muted-foreground: 215 20% 55%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 330 90% 60%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 55%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --success: 150 80% 45%;
+    --success-foreground: 222 47% 6%;
 
-    --radius: 0.5rem;
+    --border: 222 47% 18%;
+    --input: 222 47% 12%;
+    --ring: 270 95% 65%;
 
-    --sidebar-background: 0 0% 98%;
+    --radius: 0.75rem;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    /* Glow effects */
+    --glow-primary: 0 0 40px hsl(270 95% 65% / 0.4);
+    --glow-secondary: 0 0 40px hsl(180 85% 45% / 0.4);
+    --glow-accent: 0 0 40px hsl(330 90% 60% / 0.4);
 
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(270 95% 65%), hsl(330 90% 60%));
+    --gradient-secondary: linear-gradient(135deg, hsl(180 85% 45%), hsl(270 95% 65%));
+    --gradient-background: linear-gradient(180deg, hsl(222 47% 6%), hsl(222 47% 3%));
+    --gradient-card: linear-gradient(135deg, hsl(222 47% 10%), hsl(222 47% 6%));
+    --gradient-glow: radial-gradient(ellipse at center, hsl(270 95% 65% / 0.15), transparent 70%);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 222 47% 6%;
     --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
+    --card: 222 47% 8%;
     --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
+    --popover: 222 47% 10%;
     --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
+    --primary: 270 95% 65%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 180 85% 45%;
+    --secondary-foreground: 222 47% 6%;
+    --muted: 222 47% 12%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 330 90% 60%;
     --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 72% 55%;
     --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 222 47% 18%;
+    --input: 222 47% 12%;
+    --ring: 270 95% 65%;
   }
 }
 
@@ -99,7 +82,225 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    background: var(--gradient-background);
+    min-height: 100vh;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+@layer components {
+  /* Glowing card effect */
+  .glass-card {
+    @apply relative overflow-hidden rounded-xl border border-border/50;
+    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(var(--background)) 100%);
+    backdrop-filter: blur(20px);
+  }
+
+  .glass-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--gradient-glow);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+  }
+
+  .glass-card:hover::before {
+    opacity: 1;
+  }
+
+  /* Neon glow button */
+  .neon-button {
+    @apply relative overflow-hidden;
+    box-shadow: var(--glow-primary);
+    transition: all 0.3s ease;
+  }
+
+  .neon-button:hover {
+    box-shadow: 0 0 60px hsl(270 95% 65% / 0.6);
+    transform: translateY(-2px);
+  }
+
+  .neon-button::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: var(--gradient-primary);
+    border-radius: inherit;
+    z-index: -1;
+    filter: blur(15px);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .neon-button:hover::before {
+    opacity: 0.7;
+  }
+
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+  }
+
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    padding: 1px;
+    border-radius: inherit;
+    background: var(--gradient-primary);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: xor;
+    -webkit-mask-composite: xor;
+  }
+
+  /* Pulse animation for recording */
+  .pulse-ring {
+    animation: pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-ring {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.8;
+    }
+    50% {
+      transform: scale(1.15);
+      opacity: 0.4;
+    }
+  }
+
+  /* Voice wave animation */
+  .voice-wave {
+    animation: voice-wave 0.5s ease-in-out infinite;
+  }
+
+  @keyframes voice-wave {
+    0%, 100% { transform: scaleY(0.5); }
+    50% { transform: scaleY(1); }
+  }
+
+  /* Floating animation */
+  .float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+  }
+
+  /* Shimmer effect */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(270 95% 65% / 0.1),
+      transparent
+    );
+    transform: translateX(-100%);
+    animation: shimmer 2s infinite;
+  }
+
+  @keyframes shimmer {
+    100% { transform: translateX(100%); }
+  }
+
+  /* Text gradient */
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Cyber grid background */
+  .cyber-grid {
+    background-image: 
+      linear-gradient(hsl(var(--border) / 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.3) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  /* Scanline effect */
+  .scanlines::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      hsl(0 0% 0% / 0.03) 2px,
+      hsl(0 0% 0% / 0.03) 4px
+    );
+  }
+
+  /* OTP Input styling */
+  .otp-input {
+    @apply font-mono text-3xl tracking-[1rem] text-center;
+    background: hsl(var(--input));
+    border: 2px solid transparent;
+    transition: all 0.3s ease;
+  }
+
+  .otp-input:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: var(--glow-primary);
+  }
+
+  /* Success state */
+  .success-glow {
+    box-shadow: 0 0 40px hsl(150 80% 45% / 0.4);
+  }
+
+  /* Error state */
+  .error-glow {
+    box-shadow: 0 0 40px hsl(0 72% 55% / 0.4);
+  }
+}
+
+@layer utilities {
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
+  .animation-delay-600 {
+    animation-delay: 600ms;
   }
 }
