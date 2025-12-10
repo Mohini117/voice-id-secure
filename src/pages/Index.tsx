@@ -1,129 +1,125 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
-import { Fingerprint, Shield, Mic, Mail, Loader2 } from 'lucide-react';
+import { Fingerprint, Shield, Zap, Mic, ArrowRight, Sparkles } from 'lucide-react';
 
 export default function Index() {
-  const navigate = useNavigate();
-  const { user, loading } = useAuth();
-
-  useEffect(() => {
-    if (user && !loading) {
-      navigate('/dashboard');
-    }
-  }, [user, loading, navigate]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/50">
-      <div className="container mx-auto px-4 py-16">
-        {/* Hero */}
-        <div className="max-w-3xl mx-auto text-center space-y-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-4">
-            <Fingerprint className="w-10 h-10 text-primary" />
-          </div>
-          
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-            Voice Biometric
-            <span className="text-primary block">Authentication</span>
-          </h1>
-          
-          <p className="text-xl text-muted-foreground max-w-xl mx-auto">
-            Secure your identity with your unique voice signature. 
-            Fast, convenient, and backed by ML-powered verification.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" onClick={() => navigate('/auth')}>
-              Get Started
-            </Button>
-            <Button size="lg" variant="outline" onClick={() => navigate('/auth')}>
-              Sign In
-            </Button>
-          </div>
-        </div>
-
-        {/* Features */}
-        <div className="grid md:grid-cols-3 gap-8 mt-24 max-w-4xl mx-auto">
-          <div className="text-center space-y-3">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10">
-              <Mic className="w-6 h-6 text-primary" />
-            </div>
-            <h3 className="font-semibold text-lg">Voice Recognition</h3>
-            <p className="text-sm text-muted-foreground">
-              MFCC-based voice signature extraction with cosine similarity matching.
-            </p>
-          </div>
-
-          <div className="text-center space-y-3">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10">
-              <Shield className="w-6 h-6 text-primary" />
-            </div>
-            <h3 className="font-semibold text-lg">Multi-Factor Auth</h3>
-            <p className="text-sm text-muted-foreground">
-              Voice biometrics combined with SMS and email OTP fallback.
-            </p>
-          </div>
-
-          <div className="text-center space-y-3">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10">
-              <Mail className="w-6 h-6 text-primary" />
-            </div>
-            <h3 className="font-semibold text-lg">OTP Backup</h3>
-            <p className="text-sm text-muted-foreground">
-              Seamless fallback to SMS or email verification when needed.
-            </p>
-          </div>
-        </div>
-
-        {/* How it works */}
-        <div className="mt-24 max-w-2xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-8">How It Works</h2>
-          <div className="space-y-6">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-sm">
-                1
-              </div>
-              <div>
-                <h4 className="font-medium">Create Account</h4>
-                <p className="text-sm text-muted-foreground">
-                  Sign up with your email and optional phone number.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-sm">
-                2
-              </div>
-              <div>
-                <h4 className="font-medium">Enroll Voice</h4>
-                <p className="text-sm text-muted-foreground">
-                  Record 3 voice samples to create your unique voice signature.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-sm">
-                3
-              </div>
-              <div>
-                <h4 className="font-medium">Authenticate</h4>
-                <p className="text-sm text-muted-foreground">
-                  Speak to verify your identity. Use OTP as a backup if needed.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="fixed inset-0 cyber-grid opacity-20" />
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary/20 rounded-full blur-[120px] animate-pulse animation-delay-400" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accent/10 rounded-full blur-[150px]" />
       </div>
+
+      {/* Header */}
+      <header className="relative z-10 px-6 py-6">
+        <nav className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-primary/30 blur-lg rounded-full" />
+              <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                <Fingerprint className="w-7 h-7 text-primary-foreground" />
+              </div>
+            </div>
+            <span className="text-xl font-bold text-gradient">VoiceAuth</span>
+          </div>
+          <Link to="/auth">
+            <Button variant="outline" className="border-primary/50 hover:bg-primary/10 hover:border-primary">
+              Sign In
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </Link>
+        </nav>
+      </header>
+
+      {/* Hero Section */}
+      <main className="relative z-10 px-6 pt-20 pb-32">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center max-w-4xl mx-auto">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/30 bg-primary/5 mb-8 shimmer">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-sm text-muted-foreground">Next-Gen Biometric Security</span>
+            </div>
+
+            <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6">
+              <span className="text-foreground">Your Voice is Your</span>
+              <br />
+              <span className="text-gradient">Password</span>
+            </h1>
+
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
+              Experience passwordless authentication powered by advanced voice biometrics. 
+              Secure, seamless, and uniquely yours.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20">
+              <Link to="/auth">
+                <Button size="lg" className="neon-button bg-gradient-to-r from-primary to-accent text-primary-foreground px-8 py-6 text-lg">
+                  Get Started Free
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+              </Link>
+            </div>
+
+            {/* Voice Visualization */}
+            <div className="relative w-64 h-64 mx-auto mb-20">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 blur-2xl" />
+              <div className="relative w-full h-full rounded-full border border-primary/30 bg-card/50 backdrop-blur-xl flex items-center justify-center float">
+                <div className="absolute inset-4 rounded-full border border-primary/20" />
+                <div className="absolute inset-8 rounded-full border border-primary/10" />
+                <div className="flex items-center gap-1">
+                  {[...Array(7)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-2 bg-gradient-to-t from-primary to-accent rounded-full voice-wave"
+                      style={{ height: `${30 + Math.random() * 40}px`, animationDelay: `${i * 0.1}s` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Features Grid */}
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            <div className="glass-card p-6 group cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:border-primary/30">
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary to-purple-500 p-0.5 mb-4">
+                <div className="w-full h-full rounded-xl bg-background flex items-center justify-center">
+                  <Mic className="w-6 h-6 text-foreground" />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Voice Biometrics</h3>
+              <p className="text-muted-foreground text-sm">Advanced MFCC analysis captures your unique voice signature.</p>
+            </div>
+            <div className="glass-card p-6 group cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:border-primary/30">
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-secondary to-cyan-400 p-0.5 mb-4">
+                <div className="w-full h-full rounded-xl bg-background flex items-center justify-center">
+                  <Shield className="w-6 h-6 text-foreground" />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Bank-Grade Security</h3>
+              <p className="text-muted-foreground text-sm">Multi-factor authentication with OTP fallback via email and SMS.</p>
+            </div>
+            <div className="glass-card p-6 group cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:border-primary/30">
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-accent to-pink-500 p-0.5 mb-4">
+                <div className="w-full h-full rounded-xl bg-background flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-foreground" />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Lightning Fast</h3>
+              <p className="text-muted-foreground text-sm">Authenticate in under 3 seconds with client-side ML processing.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <footer className="relative z-10 border-t border-border/30 py-8">
+        <div className="max-w-7xl mx-auto px-6 text-center text-muted-foreground text-sm">
+          <p>© 2024 VoiceAuth. Secure voice biometric authentication.</p>
+        </div>
+      </footer>
     </div>
   );
 }
