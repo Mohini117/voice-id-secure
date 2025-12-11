@@ -52,54 +52,112 @@ serve(async (req) => {
       throw new Error("Failed to store OTP");
     }
 
+    console.log(`OTP generated and stored: ${otp}`);
+
     // Send OTP via chosen method
     if (method === "email") {
-      const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+      const resendApiKey = Deno.env.get("RESEND_API_KEY");
       
-      const { error: emailError } = await resend.emails.send({
-        from: "VoiceAuth <onboarding@resend.dev>",
-        to: [destination],
-        subject: "Your VoiceAuth Verification Code",
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #1a1a2e;">Verification Code</h2>
-            <p>Your one-time verification code is:</p>
-            <div style="background: #f0f0f0; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 8px; margin: 20px 0;">
-              ${otp}
-            </div>
-            <p style="color: #666; font-size: 14px;">This code expires in 5 minutes. Do not share it with anyone.</p>
-          </div>
-        `,
-      });
+      if (!resendApiKey) {
+        console.error("RESEND_API_KEY not configured");
+        throw new Error("Email service not configured");
+      }
 
-      if (emailError) {
-        console.error("Failed to send email:", emailError);
-        throw new Error("Failed to send email");
+      const resend = new Resend(resendApiKey);
+      
+      try {
+        const { data, error: emailError } = await resend.emails.send({
+          from: "VoiceAuth <onboarding@resend.dev>",
+          to: [destination],
+          subject: "Your VoiceAuth Verification Code",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px;">
+              <h2 style="color: #00f5d4; text-align: center; margin-bottom: 20px;">🔐 VoiceAuth</h2>
+              <p style="color: #ffffff; text-align: center;">Your one-time verification code is:</p>
+              <div style="background: rgba(0, 245, 212, 0.1); border: 1px solid #00f5d4; padding: 20px; text-align: center; font-size: 36px; font-weight: bold; letter-spacing: 8px; margin: 20px 0; border-radius: 8px; color: #00f5d4;">
+                ${otp}
+              </div>
+              <p style="color: #888; font-size: 14px; text-align: center;">This code expires in 5 minutes. Do not share it with anyone.</p>
+            </div>
+          `,
+        });
+
+        if (emailError) {
+          console.error("Resend API error:", emailError);
+          
+          // Check if it's a domain verification error
+          if (emailError.message?.includes("verify a domain") || emailError.message?.includes("testing emails")) {
+            throw new Error("Email service requires domain verification. Please verify your domain at resend.com/domains or use the Resend account owner's email for testing.");
+          }
+          
+          throw new Error(`Email delivery failed: ${emailError.message}`);
+        }
+
+        console.log("Email sent successfully:", data);
+      } catch (emailErr: unknown) {
+        const errMsg = emailErr instanceof Error ? emailErr.message : "Unknown email error";
+        console.error("Email sending failed:", errMsg);
+        throw new Error(errMsg);
       }
     } else if (method === "sms") {
       const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
       const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
       const fromNumber = Deno.env.get("TWILIO_FROM_NUMBER");
 
+      if (!accountSid || !authToken || !fromNumber) {
+        console.error("Twilio credentials not fully configured");
+        throw new Error("SMS service not configured");
+      }
+
+      // Format phone number for Twilio (needs E.164 format)
+      let formattedPhone = destination;
+      if (!formattedPhone.startsWith('+')) {
+        // Assume Indian number if no country code
+        formattedPhone = '+91' + formattedPhone.replace(/\D/g, '');
+      }
+
+      console.log(`Sending SMS to ${formattedPhone} from ${fromNumber}`);
+
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
       
-      const response = await fetch(twilioUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Authorization": "Basic " + btoa(`${accountSid}:${authToken}`),
-        },
-        body: new URLSearchParams({
-          To: destination,
-          From: fromNumber!,
-          Body: `Your VoiceAuth verification code is: ${otp}. Valid for 5 minutes.`,
-        }),
-      });
+      try {
+        const response = await fetch(twilioUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": "Basic " + btoa(`${accountSid}:${authToken}`),
+          },
+          body: new URLSearchParams({
+            To: formattedPhone,
+            From: fromNumber,
+            Body: `Your VoiceAuth verification code is: ${otp}. Valid for 5 minutes.`,
+          }),
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Twilio error:", errorText);
-        throw new Error("Failed to send SMS");
+        const responseData = await response.json();
+
+        if (!response.ok) {
+          console.error("Twilio error response:", responseData);
+          
+          // Check for common Twilio errors
+          if (responseData.code === 21608 || responseData.message?.includes("unverified")) {
+            throw new Error("SMS requires a verified Twilio phone number. Please verify your 'From' number at twilio.com/console");
+          }
+          if (responseData.code === 21211) {
+            throw new Error("Invalid phone number format. Please check the phone number.");
+          }
+          if (responseData.code === 21606) {
+            throw new Error("The 'From' phone number is not a valid Twilio number. Please configure a valid Twilio phone number.");
+          }
+          
+          throw new Error(responseData.message || "Failed to send SMS");
+        }
+
+        console.log("SMS sent successfully:", responseData.sid);
+      } catch (smsErr: unknown) {
+        const errMsg = smsErr instanceof Error ? smsErr.message : "Unknown SMS error";
+        console.error("SMS sending failed:", errMsg);
+        throw new Error(errMsg);
       }
     }
 
