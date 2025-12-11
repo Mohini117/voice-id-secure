@@ -1,41 +1,35 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Mail, Phone, Loader2, ArrowLeft, Send, KeyRound, FlaskConical } from 'lucide-react';
+import { Mail, Loader2, ArrowLeft, Send, KeyRound } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 interface OTPInputProps {
   userId: string;
   email: string;
-  phone: string;
+  phone?: string;
   onVerified: () => void;
   onBack: () => void;
 }
 
-export function OTPInput({ userId, email, phone, onVerified, onBack }: OTPInputProps) {
-  const [method, setMethod] = useState<'email' | 'sms' | null>(null);
+export function OTPInput({ userId, email, onVerified, onBack }: OTPInputProps) {
   const [code, setCode] = useState('');
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [sent, setSent] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
   const [demoCode, setDemoCode] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const sendOTP = async (selectedMethod: 'email' | 'sms', isDemo = false) => {
-    setMethod(selectedMethod);
+  const sendOTP = async () => {
     setSending(true);
-    setDemoMode(isDemo);
     setDemoCode(null);
 
     try {
-      const destination = selectedMethod === 'email' ? email : phone;
-      
-      console.log('Sending OTP:', { userId, method: selectedMethod, destination, demoMode: isDemo });
+      console.log('Sending OTP:', { userId, email });
       
       const { data, error } = await supabase.functions.invoke('send-otp', {
-        body: { userId, method: selectedMethod, destination, demoMode: isDemo }
+        body: { userId, method: 'email', destination: email }
       });
 
       console.log('Send OTP response:', { data, error });
@@ -49,27 +43,23 @@ export function OTPInput({ userId, email, phone, onVerified, onBack }: OTPInputP
         throw new Error(data.error || 'Failed to send OTP');
       }
 
-      // If demo mode, capture the code
-      if (isDemo && data?.demoCode) {
+      // Capture the demo code
+      if (data?.demoCode) {
         setDemoCode(data.demoCode);
       }
 
       setSent(true);
       toast({
-        title: isDemo ? 'Demo code generated!' : 'Code sent!',
-        description: isDemo 
-          ? 'Your demo verification code is shown below.' 
-          : `Check your ${selectedMethod === 'email' ? 'email inbox' : 'phone'} for the verification code.`,
+        title: 'Verification code sent!',
+        description: 'Check below for your verification code.',
       });
     } catch (error: any) {
       console.error('Failed to send OTP:', error);
       toast({
         title: 'Failed to send code',
-        description: error.message || 'Please check your credentials and try again.',
+        description: error.message || 'Please try again.',
         variant: 'destructive',
       });
-      setMethod(null);
-      setDemoMode(false);
     } finally {
       setSending(false);
     }
@@ -115,8 +105,6 @@ export function OTPInput({ userId, email, phone, onVerified, onBack }: OTPInputP
     }
   };
 
-  const hasValidPhone = phone && phone.trim().length > 0;
-
   if (!sent) {
     return (
       <div className="space-y-6">
@@ -130,91 +118,40 @@ export function OTPInput({ userId, email, phone, onVerified, onBack }: OTPInputP
           Back to voice
         </Button>
 
-        <div className="space-y-2">
-          <h3 className="text-lg font-semibold text-gradient">Choose verification method</h3>
+        <div className="space-y-2 text-center">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-4">
+            <Mail className="w-8 h-8 text-primary" />
+          </div>
+          <h3 className="text-lg font-semibold text-gradient">Email Verification</h3>
           <p className="text-sm text-muted-foreground">
-            We'll send you a 6-digit code to verify your identity.
+            We'll send a 6-digit code to verify your identity.
           </p>
         </div>
 
-        <div className="grid gap-3">
-          {/* Demo Mode Button */}
-          <button
-            onClick={() => sendOTP('email', true)}
-            disabled={sending}
-            className="group relative w-full p-4 rounded-xl border-2 border-dashed border-accent/50 bg-accent/5 hover:bg-accent/10 hover:border-accent transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <div className="flex items-center gap-4">
-              {sending && demoMode ? (
-                <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center">
-                  <Loader2 className="w-6 h-6 text-accent animate-spin" />
-                </div>
-              ) : (
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent/20 to-yellow-400/20 flex items-center justify-center group-hover:from-accent/30 group-hover:to-yellow-400/30 transition-all">
-                  <FlaskConical className="w-6 h-6 text-accent" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground">Demo Mode</p>
-                <p className="text-sm text-muted-foreground">Test without email/SMS setup</p>
-              </div>
-              <Send className="w-5 h-5 text-muted-foreground group-hover:text-accent transition-colors" />
+        <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Mail className="w-5 h-5 text-primary" />
             </div>
-          </button>
-
-          {/* Email Button */}
-          <button
-            onClick={() => sendOTP('email')}
-            disabled={sending}
-            className="group relative w-full p-4 rounded-xl border border-border/50 bg-muted/30 hover:bg-muted/50 hover:border-primary/50 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <div className="flex items-center gap-4">
-              {sending && method === 'email' && !demoMode ? (
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
-                </div>
-              ) : (
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center group-hover:from-primary/30 group-hover:to-accent/30 transition-all">
-                  <Mail className="w-6 h-6 text-primary" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground">Email</p>
-                <p className="text-sm text-muted-foreground truncate">{email}</p>
-              </div>
-              <Send className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">Email</p>
+              <p className="text-sm text-muted-foreground truncate">{email}</p>
             </div>
-          </button>
-
-          {hasValidPhone && (
-            <button
-              onClick={() => sendOTP('sms')}
-              disabled={sending}
-              className="group relative w-full p-4 rounded-xl border border-border/50 bg-muted/30 hover:bg-muted/50 hover:border-secondary/50 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <div className="flex items-center gap-4">
-                {sending && method === 'sms' ? (
-                  <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center">
-                    <Loader2 className="w-6 h-6 text-secondary animate-spin" />
-                  </div>
-                ) : (
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-secondary/20 to-cyan-400/20 flex items-center justify-center group-hover:from-secondary/30 group-hover:to-cyan-400/30 transition-all">
-                    <Phone className="w-6 h-6 text-secondary" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground">SMS</p>
-                  <p className="text-sm text-muted-foreground truncate">{phone}</p>
-                </div>
-                <Send className="w-5 h-5 text-muted-foreground group-hover:text-secondary transition-colors" />
-              </div>
-            </button>
-          )}
+          </div>
         </div>
 
-        <p className="text-xs text-muted-foreground text-center">
-          💡 Use <span className="text-accent font-medium">Demo Mode</span> to test OTP without configuring email/SMS services.
-        </p>
+        <Button
+          className="w-full neon-button bg-gradient-to-r from-primary to-accent text-primary-foreground h-12"
+          onClick={sendOTP}
+          disabled={sending}
+        >
+          {sending ? (
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+          ) : (
+            <Send className="w-5 h-5 mr-2" />
+          )}
+          Send Verification Code
+        </Button>
       </div>
     );
   }
@@ -227,14 +164,12 @@ export function OTPInput({ userId, email, phone, onVerified, onBack }: OTPInputP
         onClick={() => {
           setSent(false);
           setCode('');
-          setMethod(null);
-          setDemoMode(false);
           setDemoCode(null);
         }}
         className="text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="w-4 h-4 mr-2" />
-        Choose different method
+        Back
       </Button>
 
       <div className="space-y-2 text-center">
@@ -243,18 +178,16 @@ export function OTPInput({ userId, email, phone, onVerified, onBack }: OTPInputP
         </div>
         <h3 className="text-lg font-semibold">Enter verification code</h3>
         <p className="text-sm text-muted-foreground">
-          {demoMode 
-            ? 'Your demo verification code is shown below.'
-            : `We sent a 6-digit code to your ${method === 'email' ? 'email' : 'phone'}.`
-          }
+          Enter the 6-digit code shown below.
         </p>
       </div>
 
       {/* Demo Code Display */}
-      {demoMode && demoCode && (
-        <div className="p-4 rounded-xl bg-accent/10 border border-accent/30 text-center">
-          <p className="text-sm text-muted-foreground mb-2">Your demo code:</p>
-          <p className="text-3xl font-mono font-bold tracking-[0.5em] text-accent">{demoCode}</p>
+      {demoCode && (
+        <div className="p-5 rounded-xl bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/30 text-center">
+          <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Your verification code</p>
+          <p className="text-4xl font-mono font-bold tracking-[0.5em] text-gradient">{demoCode}</p>
+          <p className="text-xs text-muted-foreground mt-3">Expires in 5 minutes</p>
         </div>
       )}
 
@@ -285,7 +218,7 @@ export function OTPInput({ userId, email, phone, onVerified, onBack }: OTPInputP
         <Button
           variant="ghost"
           className="w-full text-muted-foreground hover:text-foreground"
-          onClick={() => sendOTP(method!, demoMode)}
+          onClick={sendOTP}
           disabled={sending}
         >
           {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
