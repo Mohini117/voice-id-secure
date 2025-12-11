@@ -2,18 +2,6 @@
 
 ## Project info
 
-**URL**: https://voiceauth.dev/projects/REPLACE_WITH_PROJECT_ID
-
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-### Use VoiceAuth
-
-Simply visit the [VoiceAuth Project](https://voiceauth.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via VoiceAuth will be committed automatically to this repo.
-
 ### Use your preferred IDE
 
 If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in VoiceAuth.
