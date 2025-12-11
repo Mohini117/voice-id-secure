@@ -11,6 +11,7 @@ interface SendOTPRequest {
   userId: string;
   method: "email" | "sms";
   destination: string;
+  demoMode?: boolean;
 }
 
 function generateOTP(): string {
@@ -24,9 +25,9 @@ serve(async (req) => {
   }
 
   try {
-    const { userId, method, destination }: SendOTPRequest = await req.json();
+    const { userId, method, destination, demoMode }: SendOTPRequest = await req.json();
     
-    console.log(`Sending OTP via ${method} to ${destination} for user ${userId}`);
+    console.log(`Sending OTP via ${method} to ${destination} for user ${userId}${demoMode ? ' (DEMO MODE)' : ''}`);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -53,6 +54,19 @@ serve(async (req) => {
     }
 
     console.log(`OTP generated and stored: ${otp}`);
+
+    // DEMO MODE: Return OTP directly without sending
+    if (demoMode) {
+      console.log("Demo mode enabled - returning OTP directly");
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: `Demo mode: Your code is ${otp}`,
+          demoCode: otp 
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Send OTP via chosen method
     if (method === "email") {
@@ -84,12 +98,6 @@ serve(async (req) => {
 
         if (emailError) {
           console.error("Resend API error:", emailError);
-          
-          // Check if it's a domain verification error
-          if (emailError.message?.includes("verify a domain") || emailError.message?.includes("testing emails")) {
-            throw new Error("Email service requires domain verification. Please verify your domain at resend.com/domains or use the Resend account owner's email for testing.");
-          }
-          
           throw new Error(`Email delivery failed: ${emailError.message}`);
         }
 
@@ -112,8 +120,12 @@ serve(async (req) => {
       // Format phone number for Twilio (needs E.164 format)
       let formattedPhone = destination;
       if (!formattedPhone.startsWith('+')) {
-        // Assume Indian number if no country code
         formattedPhone = '+91' + formattedPhone.replace(/\D/g, '');
+      }
+
+      // Check if To and From are the same
+      if (formattedPhone === fromNumber) {
+        throw new Error("Cannot send SMS to the same number as the sender. Please use a Twilio-purchased number as TWILIO_FROM_NUMBER.");
       }
 
       console.log(`Sending SMS to ${formattedPhone} from ${fromNumber}`);
@@ -138,18 +150,6 @@ serve(async (req) => {
 
         if (!response.ok) {
           console.error("Twilio error response:", responseData);
-          
-          // Check for common Twilio errors
-          if (responseData.code === 21608 || responseData.message?.includes("unverified")) {
-            throw new Error("SMS requires a verified Twilio phone number. Please verify your 'From' number at twilio.com/console");
-          }
-          if (responseData.code === 21211) {
-            throw new Error("Invalid phone number format. Please check the phone number.");
-          }
-          if (responseData.code === 21606) {
-            throw new Error("The 'From' phone number is not a valid Twilio number. Please configure a valid Twilio phone number.");
-          }
-          
           throw new Error(responseData.message || "Failed to send SMS");
         }
 
