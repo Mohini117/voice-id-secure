@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface SendOTPRequest {
   userId: string;
+  method?: "email";
   destination: string;
 }
 
@@ -24,7 +25,7 @@ serve(async (req) => {
 
   try {
     const { userId, destination }: SendOTPRequest = await req.json();
-    
+
     console.log(`Generating OTP for user ${userId}, email: ${destination}`);
 
     // Get SMTP credentials
@@ -61,7 +62,6 @@ serve(async (req) => {
 
     console.log(`OTP stored in database: ${otp}`);
 
-    // Send email via SMTP (Gmail)
     const client = new SMTPClient({
       connection: {
         hostname: "smtp.gmail.com",
@@ -78,49 +78,31 @@ serve(async (req) => {
       await client.send({
         from: smtpUser,
         to: destination,
-        subject: "VoiceAuth - Your Verification Code",
-        content: `Your verification code is: ${otp}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <h1 style="color: #8B5CF6; margin: 0;">VoiceAuth</h1>
-              <p style="color: #666; margin-top: 5px;">Secure Voice Authentication</p>
-            </div>
-            <div style="background: linear-gradient(135deg, #8B5CF6 0%, #D946EF 100%); border-radius: 12px; padding: 30px; text-align: center;">
-              <p style="color: white; margin: 0 0 15px 0; font-size: 16px;">Your verification code is:</p>
-              <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 20px; display: inline-block;">
-                <span style="color: white; font-size: 32px; font-weight: bold; letter-spacing: 8px; font-family: monospace;">${otp}</span>
-              </div>
-              <p style="color: rgba(255,255,255,0.8); margin: 20px 0 0 0; font-size: 14px;">This code expires in 5 minutes</p>
-            </div>
-            <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">
-              If you didn't request this code, please ignore this email.
-            </p>
-          </div>
-        `,
+        subject: "Your VoiceAuth verification code",
+        content:
+          `Your VoiceAuth verification code is: ${otp}\n\n` +
+          "This code will expire in 5 minutes. If you didn't request this, you can ignore this email.",
       });
 
-      await client.close();
       console.log(`OTP email sent successfully to ${destination}`);
-
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: "Verification code sent to your email"
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
     } catch (emailError) {
-      await client.close();
       console.error("Failed to send email:", emailError);
       throw new Error("Failed to send verification email. Please check SMTP configuration.");
     }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: "Verification code sent to your email",
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   } catch (error: unknown) {
     console.error("Error in send-otp:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ success: false, error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
