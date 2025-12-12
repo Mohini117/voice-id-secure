@@ -18,12 +18,11 @@ export function OTPInput({ userId, email, onVerified, onBack }: OTPInputProps) {
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [sent, setSent] = useState(false);
-  const [demoCode, setDemoCode] = useState<string | null>(null);
+  
   const { toast } = useToast();
 
   const sendOTP = async () => {
     setSending(true);
-    setDemoCode(null);
 
     try {
       console.log('Sending OTP:', { userId, email });
@@ -43,15 +42,10 @@ export function OTPInput({ userId, email, onVerified, onBack }: OTPInputProps) {
         throw new Error(data.error || 'Failed to send OTP');
       }
 
-      // Capture the demo code
-      if (data?.demoCode) {
-        setDemoCode(data.demoCode);
-      }
-
       setSent(true);
       toast({
         title: 'Verification code sent!',
-        description: 'Check below for your verification code.',
+        description: 'Check your email for the 6-digit code.',
       });
     } catch (error: any) {
       console.error('Failed to send OTP:', error);
@@ -164,7 +158,6 @@ export function OTPInput({ userId, email, onVerified, onBack }: OTPInputProps) {
         onClick={() => {
           setSent(false);
           setCode('');
-          setDemoCode(null);
         }}
         className="text-muted-foreground hover:text-foreground"
       >
@@ -178,18 +171,9 @@ export function OTPInput({ userId, email, onVerified, onBack }: OTPInputProps) {
         </div>
         <h3 className="text-lg font-semibold">Enter verification code</h3>
         <p className="text-sm text-muted-foreground">
-          Enter the 6-digit code shown below.
+          Enter the 6-digit code sent to your email.
         </p>
       </div>
-
-      {/* Demo Code Display */}
-      {demoCode && (
-        <div className="p-5 rounded-xl bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/30 text-center">
-          <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Your verification code</p>
-          <p className="text-4xl font-mono font-bold tracking-[0.5em] text-gradient">{demoCode}</p>
-          <p className="text-xs text-muted-foreground mt-3">Expires in 5 minutes</p>
-        </div>
-      )}
 
       <div className="space-y-4">
         <Input
