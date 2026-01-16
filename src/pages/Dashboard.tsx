@@ -15,15 +15,18 @@ import {
   serializeSignature 
 } from '@/lib/audio/voiceSignature';
 import { 
-  ENROLLMENT_PASSPHRASE, 
   PASSPHRASE_INSTRUCTIONS,
   MIN_PASSPHRASE_DURATION,
   MAX_PASSPHRASE_DURATION,
-  REQUIRED_ENROLLMENT_SAMPLES
+  REQUIRED_ENROLLMENT_SAMPLES,
+  SUGGESTED_PASSPHRASES,
+  MIN_PASSPHRASE_WORDS,
+  MAX_PASSPHRASE_WORDS
 } from '@/lib/audio/passphrase';
+import { Input } from '@/components/ui/input';
 import { 
   Loader2, Fingerprint, Shield, CheckCircle2, XCircle, LogOut, Mic, 
-  User, Mail, Phone, RefreshCw, AlertTriangle, Quote
+  User, Mail, Phone, RefreshCw, AlertTriangle, Quote, Edit3
 } from 'lucide-react';
 
 type VoiceProfile = {
@@ -70,6 +73,9 @@ export default function Dashboard() {
   const [showOTP, setShowOTP] = useState(false);
   const [fetchingProfile, setFetchingProfile] = useState(true);
   const [verificationAttempts, setVerificationAttempts] = useState(0);
+  const [userPassphrase, setUserPassphrase] = useState('');
+  const [passphraseConfirmed, setPassphraseConfirmed] = useState(false);
+  const [storedPassphrase, setStoredPassphrase] = useState<string | null>(null);
 
   const MAX_VERIFICATION_ATTEMPTS = 3;
 
