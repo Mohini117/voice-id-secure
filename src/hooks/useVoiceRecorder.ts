@@ -1,5 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
 import { extractMFCC, computeVoiceSignature, verifyVoice } from '@/lib/audio/mfcc';
+import { 
+  VoiceSignature, 
+  extractVoiceSignature, 
+  averageSignatures, 
+  verifyVoiceStrict,
+  VerificationDetails 
+} from '@/lib/audio/voiceSignature';
 
 const SAMPLE_RATE = 16000;
 
@@ -10,12 +17,21 @@ interface VoiceRecorderState {
   error: string | null;
 }
 
+interface VerificationResult {
+  match: boolean;
+  confidence: number;
+  details?: VerificationDetails;
+}
+
 interface VoiceRecorderResult {
   state: VoiceRecorderState;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<Float32Array | null>;
   extractSignature: (audioData: Float32Array) => number[];
-  verifyAgainst: (audioData: Float32Array, storedSignature: number[], threshold?: number) => { match: boolean; confidence: number };
+  extractFullSignature: (audioData: Float32Array) => VoiceSignature;
+  verifyAgainst: (audioData: Float32Array, storedSignature: number[], threshold?: number) => VerificationResult;
+  verifyAgainstStrict: (audioData: Float32Array, storedSignature: VoiceSignature, threshold?: number) => VerificationResult;
+  averageEnrollmentSignatures: (signatures: VoiceSignature[]) => VoiceSignature;
 }
 
 export function useVoiceRecorder(): VoiceRecorderResult {
@@ -147,18 +163,40 @@ export function useVoiceRecorder(): VoiceRecorderResult {
     });
   }, []);
 
+  // Legacy: Extract simple signature (mean MFCC only)
   const extractSignature = useCallback((audioData: Float32Array): number[] => {
     const mfcc = extractMFCC(audioData);
     return computeVoiceSignature(mfcc);
   }, []);
 
+  // New: Extract full voice signature with variance and dynamics
+  const extractFullSignature = useCallback((audioData: Float32Array): VoiceSignature => {
+    return extractVoiceSignature(audioData);
+  }, []);
+
+  // Legacy: Verify against simple signature
   const verifyAgainst = useCallback((
     audioData: Float32Array,
     storedSignature: number[],
     threshold: number = 0.85
-  ) => {
+  ): VerificationResult => {
     const mfcc = extractMFCC(audioData);
     return verifyVoice(mfcc, storedSignature, threshold);
+  }, []);
+
+  // New: Strict verification against full signature
+  const verifyAgainstStrict = useCallback((
+    audioData: Float32Array,
+    storedSignature: VoiceSignature,
+    threshold: number = 0.92
+  ): VerificationResult => {
+    const testSignature = extractVoiceSignature(audioData);
+    return verifyVoiceStrict(testSignature, storedSignature, threshold);
+  }, []);
+
+  // Average multiple enrollment signatures
+  const averageEnrollmentSignatures = useCallback((signatures: VoiceSignature[]): VoiceSignature => {
+    return averageSignatures(signatures);
   }, []);
 
   return {
@@ -166,6 +204,9 @@ export function useVoiceRecorder(): VoiceRecorderResult {
     startRecording,
     stopRecording,
     extractSignature,
+    extractFullSignature,
     verifyAgainst,
+    verifyAgainstStrict,
+    averageEnrollmentSignatures,
   };
 }
