@@ -10,8 +10,20 @@ import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { 
+  VoiceSignature, 
+  deserializeSignature, 
+  serializeSignature 
+} from '@/lib/audio/voiceSignature';
+import { 
+  ENROLLMENT_PASSPHRASE, 
+  PASSPHRASE_INSTRUCTIONS,
+  MIN_PASSPHRASE_DURATION,
+  MAX_PASSPHRASE_DURATION,
+  REQUIRED_ENROLLMENT_SAMPLES
+} from '@/lib/audio/passphrase';
+import { 
   Loader2, Fingerprint, Shield, CheckCircle2, XCircle, LogOut, Mic, 
-  User, Mail, Phone, ArrowLeft, Sparkles, RefreshCw 
+  User, Mail, Phone, RefreshCw, AlertTriangle, Quote
 } from 'lucide-react';
 
 type VoiceProfile = {
@@ -31,20 +43,35 @@ type Profile = {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, loading, signOut } = useAuth();
-  const { state: recorderState, startRecording, stopRecording, extractSignature, verifyAgainst } = useVoiceRecorder();
+  const { 
+    state: recorderState, 
+    startRecording, 
+    stopRecording, 
+    extractFullSignature,
+    verifyAgainstStrict,
+    averageEnrollmentSignatures
+  } = useVoiceRecorder();
   const { toast } = useToast();
 
   const [voiceProfile, setVoiceProfile] = useState<VoiceProfile | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [storedSignature, setStoredSignature] = useState<number[] | null>(null);
-  const [enrollmentSamples, setEnrollmentSamples] = useState<number[][]>([]);
+  const [storedSignature, setStoredSignature] = useState<VoiceSignature | null>(null);
+  const [enrollmentSamples, setEnrollmentSamples] = useState<VoiceSignature[]>([]);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationResult, setVerificationResult] = useState<{ match: boolean; confidence: number } | null>(null);
+  const [verificationResult, setVerificationResult] = useState<{ 
+    match: boolean; 
+    confidence: number;
+    details?: {
+      meanSimilarity: number;
+      varianceSimilarity: number;
+    };
+  } | null>(null);
   const [showOTP, setShowOTP] = useState(false);
   const [fetchingProfile, setFetchingProfile] = useState(true);
+  const [verificationAttempts, setVerificationAttempts] = useState(0);
 
-  const REQUIRED_SAMPLES = 3;
+  const MAX_VERIFICATION_ATTEMPTS = 3;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -80,11 +107,9 @@ export default function Dashboard() {
 
       if (voiceData) {
         setVoiceProfile(voiceData);
-        try {
-          const sig = JSON.parse(voiceData.azure_profile_id);
+        const sig = deserializeSignature(voiceData.azure_profile_id);
+        if (sig) {
           setStoredSignature(sig);
-        } catch {
-          // Not a valid signature yet
         }
       }
     } catch (error) {
@@ -99,16 +124,17 @@ export default function Dashboard() {
       const audioData = await stopRecording();
       if (!audioData) return;
 
-      const signature = extractSignature(audioData);
+      // Extract full voice signature with variance and dynamics
+      const signature = extractFullSignature(audioData);
       const newSamples = [...enrollmentSamples, signature];
       setEnrollmentSamples(newSamples);
 
-      if (newSamples.length >= REQUIRED_SAMPLES) {
+      if (newSamples.length >= REQUIRED_ENROLLMENT_SAMPLES) {
         await completeEnrollment(newSamples);
       } else {
         toast({
-          title: `Sample ${newSamples.length}/${REQUIRED_SAMPLES} recorded`,
-          description: `${REQUIRED_SAMPLES - newSamples.length} more sample(s) needed.`,
+          title: `Sample ${newSamples.length}/${REQUIRED_ENROLLMENT_SAMPLES} recorded`,
+          description: `${REQUIRED_ENROLLMENT_SAMPLES - newSamples.length} more sample(s) needed. Say the same phrase again.`,
         });
       }
     } else {
@@ -116,30 +142,20 @@ export default function Dashboard() {
     }
   };
 
-  const completeEnrollment = async (samples: number[][]) => {
+  const completeEnrollment = async (samples: VoiceSignature[]) => {
     if (!user) return;
 
     setIsEnrolling(true);
 
     try {
-      const numCoeffs = samples[0].length;
-      const finalSignature = new Array(numCoeffs).fill(0);
-      
-      for (const sample of samples) {
-        for (let i = 0; i < numCoeffs; i++) {
-          finalSignature[i] += sample[i];
-        }
-      }
-      
-      for (let i = 0; i < numCoeffs; i++) {
-        finalSignature[i] /= samples.length;
-      }
+      // Average all voice signatures
+      const finalSignature = averageEnrollmentSignatures(samples);
 
       const { error } = await supabase
         .from('voice_profiles')
         .upsert({
           user_id: user.id,
-          azure_profile_id: JSON.stringify(finalSignature),
+          azure_profile_id: serializeSignature(finalSignature),
           enrollment_status: 'enrolled',
           samples_collected: samples.length,
         });
@@ -159,7 +175,7 @@ export default function Dashboard() {
 
       toast({
         title: 'Voice enrolled!',
-        description: 'Your voice profile has been created successfully.',
+        description: 'Your voice profile has been created. Remember your passphrase!',
       });
 
       fetchProfiles();
@@ -179,6 +195,8 @@ export default function Dashboard() {
     setStoredSignature(null);
     setEnrollmentSamples([]);
     setVoiceProfile(prev => prev ? { ...prev, enrollment_status: 'pending' } : null);
+    setVerificationResult(null);
+    setVerificationAttempts(0);
   };
 
   const handleVerificationRecording = async () => {
@@ -191,8 +209,10 @@ export default function Dashboard() {
         return;
       }
 
-      const result = verifyAgainst(audioData, storedSignature, 0.80);
+      // Use strict verification with full signature
+      const result = verifyAgainstStrict(audioData, storedSignature, 0.92);
       setVerificationResult(result);
+      setVerificationAttempts(prev => prev + 1);
 
       await supabase.from('auth_logs').insert({
         user_id: user?.id,
@@ -204,14 +224,26 @@ export default function Dashboard() {
       if (result.match) {
         toast({
           title: 'Voice verified!',
-          description: `Confidence: ${(result.confidence * 100).toFixed(1)}%`,
+          description: `Identity confirmed with ${(result.confidence * 100).toFixed(1)}% confidence.`,
         });
+        setVerificationAttempts(0);
       } else {
-        toast({
-          title: 'Voice not recognized',
-          description: 'You can try again or use OTP verification.',
-          variant: 'destructive',
-        });
+        const remainingAttempts = MAX_VERIFICATION_ATTEMPTS - (verificationAttempts + 1);
+        
+        if (remainingAttempts <= 0) {
+          toast({
+            title: 'Voice not recognized',
+            description: 'Maximum attempts reached. Please use OTP verification.',
+            variant: 'destructive',
+          });
+          setShowOTP(true);
+        } else {
+          toast({
+            title: 'Voice not recognized',
+            description: `${remainingAttempts} attempt(s) remaining. Make sure to say: "${ENROLLMENT_PASSPHRASE}"`,
+            variant: 'destructive',
+          });
+        }
       }
 
       setIsVerifying(false);
@@ -327,15 +359,29 @@ export default function Dashboard() {
               <CardDescription>
                 {isEnrolled
                   ? "Your voice signature is ready for authentication."
-                  : `Record ${REQUIRED_SAMPLES} voice samples to enroll your unique voice signature.`}
+                  : `Record ${REQUIRED_ENROLLMENT_SAMPLES} voice samples saying the same passphrase.`}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {!isEnrolled ? (
                 <div className="space-y-6">
+                  {/* Passphrase Display */}
+                  <div className="p-4 rounded-xl bg-primary/10 border border-primary/30">
+                    <div className="flex items-start gap-3">
+                      <Quote className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">Your voice password:</p>
+                        <p className="text-lg font-semibold text-foreground">"{ENROLLMENT_PASSPHRASE}"</p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Say this phrase clearly {REQUIRED_ENROLLMENT_SAMPLES} times. It will be your voice password.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Progress Indicators */}
                   <div className="flex items-center justify-center gap-3 mb-6">
-                    {Array.from({ length: REQUIRED_SAMPLES }).map((_, i) => (
+                    {Array.from({ length: REQUIRED_ENROLLMENT_SAMPLES }).map((_, i) => (
                       <div
                         key={i}
                         className={`relative w-4 h-4 rounded-full transition-all duration-300 ${
@@ -357,13 +403,9 @@ export default function Dashboard() {
                     audioLevel={recorderState.audioLevel}
                     onStart={handleEnrollmentRecording}
                     onStop={handleEnrollmentRecording}
-                    minDuration={3}
-                    maxDuration={8}
+                    minDuration={MIN_PASSPHRASE_DURATION}
+                    maxDuration={MAX_PASSPHRASE_DURATION}
                   />
-                  
-                  <p className="text-center text-sm text-muted-foreground">
-                    Say a natural phrase like <span className="text-foreground font-medium">"My voice is my password"</span>
-                  </p>
                 </div>
               ) : (
                 <div className="text-center space-y-4 py-4">
@@ -393,18 +435,39 @@ export default function Dashboard() {
                   Voice Verification
                 </CardTitle>
                 <CardDescription>
-                  Verify your identity using your unique voice signature.
+                  Say your voice password to verify your identity.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Passphrase Reminder */}
+                <div className="p-4 rounded-xl bg-accent/10 border border-accent/30">
+                  <div className="flex items-start gap-3">
+                    <Quote className="w-5 h-5 text-accent mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Say your voice password:</p>
+                      <p className="text-lg font-semibold text-foreground">"{ENROLLMENT_PASSPHRASE}"</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Attempts Warning */}
+                {verificationAttempts > 0 && verificationAttempts < MAX_VERIFICATION_ATTEMPTS && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span className="text-sm">
+                      {MAX_VERIFICATION_ATTEMPTS - verificationAttempts} attempt(s) remaining
+                    </span>
+                  </div>
+                )}
+
                 <VoiceRecorder
                   isRecording={recorderState.isRecording}
                   isProcessing={recorderState.isProcessing || isVerifying}
                   audioLevel={recorderState.audioLevel}
                   onStart={handleVerificationRecording}
                   onStop={handleVerificationRecording}
-                  minDuration={2}
-                  maxDuration={6}
+                  minDuration={MIN_PASSPHRASE_DURATION}
+                  maxDuration={MAX_PASSPHRASE_DURATION}
                 />
 
                 {verificationResult && (
@@ -430,6 +493,12 @@ export default function Dashboard() {
                         <p className="text-sm text-muted-foreground">
                           Confidence: {(verificationResult.confidence * 100).toFixed(1)}%
                         </p>
+                        {!verificationResult.match && verificationResult.details && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Voice: {(verificationResult.details.meanSimilarity * 100).toFixed(0)}% | 
+                            Pattern: {(verificationResult.details.varianceSimilarity * 100).toFixed(0)}%
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -438,9 +507,11 @@ export default function Dashboard() {
                 <Button
                   variant="outline"
                   className="w-full border-border/50 hover:bg-muted/50 hover:border-accent"
-                  onClick={() => setShowOTP(true)}
+                  onClick={() => {
+                    setShowOTP(true);
+                    setVerificationAttempts(0);
+                  }}
                 >
-                  <Sparkles className="w-4 h-4 mr-2" />
                   Use OTP Verification Instead
                 </Button>
               </CardContent>
@@ -466,25 +537,37 @@ export default function Dashboard() {
                   phone={profile.phone}
                   onVerified={() => {
                     setShowOTP(false);
+                    setVerificationAttempts(0);
                     toast({
                       title: 'Authenticated!',
                       description: 'OTP verification successful.',
                     });
                   }}
-                  onBack={() => setShowOTP(false)}
+                  onBack={() => {
+                    setShowOTP(false);
+                    setVerificationAttempts(0);
+                  }}
                 />
               </CardContent>
             </Card>
           )}
 
-          {/* Error Display */}
-          {recorderState.error && (
-            <Card className="border-destructive/50 bg-destructive/5">
-              <CardContent className="pt-6">
-                <p className="text-destructive text-sm">{recorderState.error}</p>
-              </CardContent>
-            </Card>
-          )}
+          {/* Security Notice */}
+          <Card className="glass-card border-border/50 bg-amber-500/5">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-foreground">Security Notice</p>
+                  <p className="text-muted-foreground mt-1">
+                    Your voice password "{ENROLLMENT_PASSPHRASE}" is unique to you. 
+                    Only your voice saying this exact phrase will be accepted for verification.
+                    After {MAX_VERIFICATION_ATTEMPTS} failed attempts, you'll need to use OTP verification.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
