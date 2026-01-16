@@ -11,15 +11,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Loader2, Fingerprint, Shield, CheckCircle2, XCircle, LogOut, Mic, 
-  User, Mail, Phone, ArrowLeft, Sparkles, RefreshCw, AlertTriangle, Bot
+  User, Mail, Phone, ArrowLeft, Sparkles, RefreshCw 
 } from 'lucide-react';
-import type { DeepfakeAnalysis } from '@/lib/audio/deepfakeDetection';
-
-type VerificationResult = {
-  match: boolean;
-  confidence: number;
-  deepfakeAnalysis?: DeepfakeAnalysis;
-};
 
 type VoiceProfile = {
   id: string;
@@ -38,7 +31,7 @@ type Profile = {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, loading, signOut } = useAuth();
-  const { state: recorderState, startRecording, stopRecording, extractSignature, verifyAgainst, checkDeepfake } = useVoiceRecorder();
+  const { state: recorderState, startRecording, stopRecording, extractSignature, verifyAgainst } = useVoiceRecorder();
   const { toast } = useToast();
 
   const [voiceProfile, setVoiceProfile] = useState<VoiceProfile | null>(null);
@@ -47,7 +40,7 @@ export default function Dashboard() {
   const [enrollmentSamples, setEnrollmentSamples] = useState<number[][]>([]);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
+  const [verificationResult, setVerificationResult] = useState<{ match: boolean; confidence: number } | null>(null);
   const [showOTP, setShowOTP] = useState(false);
   const [fetchingProfile, setFetchingProfile] = useState(true);
 
@@ -201,23 +194,14 @@ export default function Dashboard() {
       const result = verifyAgainst(audioData, storedSignature, 0.80);
       setVerificationResult(result);
 
-      // Log deepfake detection attempt
-      const isDeepfake = !result.deepfakeAnalysis?.isHuman;
-      
       await supabase.from('auth_logs').insert({
         user_id: user?.id,
-        auth_method: isDeepfake ? 'voice_deepfake_blocked' : 'voice_verification',
-        success: result.match && !isDeepfake,
+        auth_method: 'voice_verification',
+        success: result.match,
         confidence_score: result.confidence,
       });
 
-      if (isDeepfake) {
-        toast({
-          title: 'AI Voice Detected!',
-          description: 'This appears to be an AI-generated voice. Only human voices are allowed.',
-          variant: 'destructive',
-        });
-      } else if (result.match) {
+      if (result.match) {
         toast({
           title: 'Voice verified!',
           description: `Confidence: ${(result.confidence * 100).toFixed(1)}%`,
@@ -424,81 +408,30 @@ export default function Dashboard() {
                 />
 
                 {verificationResult && (
-                  <div className="space-y-4">
-                    {/* Deepfake Detection Result */}
-                    {verificationResult.deepfakeAnalysis && (
-                      <div className={`p-4 rounded-xl transition-all ${
-                        verificationResult.deepfakeAnalysis.isHuman
-                          ? 'bg-primary/5 border border-primary/20'
-                          : 'bg-destructive/10 border border-destructive/30 error-glow'
-                      }`}>
-                        <div className="flex items-center gap-3">
-                          {verificationResult.deepfakeAnalysis.isHuman ? (
-                            <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                              <User className="w-5 h-5 text-primary" />
-                            </div>
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-destructive/20 flex items-center justify-center">
-                              <Bot className="w-5 h-5 text-destructive" />
-                            </div>
-                          )}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium">
-                                {verificationResult.deepfakeAnalysis.isHuman 
-                                  ? 'Human Voice Detected' 
-                                  : 'AI/Deepfake Voice Blocked!'}
-                              </p>
-                              {!verificationResult.deepfakeAnalysis.isHuman && (
-                                <AlertTriangle className="w-4 h-4 text-destructive" />
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              Authenticity: {(verificationResult.deepfakeAnalysis.confidence * 100).toFixed(0)}%
-                            </p>
-                          </div>
+                  <div className={`p-5 rounded-xl transition-all ${
+                    verificationResult.match 
+                      ? 'bg-primary/10 border border-primary/30 success-glow' 
+                      : 'bg-destructive/10 border border-destructive/30 error-glow'
+                  }`}>
+                    <div className="flex items-center gap-4">
+                      {verificationResult.match ? (
+                        <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                          <CheckCircle2 className="w-6 h-6 text-primary" />
                         </div>
-                        {!verificationResult.deepfakeAnalysis.isHuman && verificationResult.deepfakeAnalysis.reasons.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-destructive/20">
-                            <p className="text-xs text-destructive/80 font-medium mb-1">Detection reasons:</p>
-                            <ul className="text-xs text-muted-foreground space-y-0.5">
-                              {verificationResult.deepfakeAnalysis.reasons.slice(0, 3).map((reason, i) => (
-                                <li key={i}>• {reason}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Voice Match Result */}
-                    {verificationResult.deepfakeAnalysis?.isHuman && (
-                      <div className={`p-5 rounded-xl transition-all ${
-                        verificationResult.match 
-                          ? 'bg-primary/10 border border-primary/30 success-glow' 
-                          : 'bg-destructive/10 border border-destructive/30 error-glow'
-                      }`}>
-                        <div className="flex items-center gap-4">
-                          {verificationResult.match ? (
-                            <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                              <CheckCircle2 className="w-6 h-6 text-primary" />
-                            </div>
-                          ) : (
-                            <div className="w-12 h-12 rounded-full bg-destructive/20 flex items-center justify-center">
-                              <XCircle className="w-6 h-6 text-destructive" />
-                            </div>
-                          )}
-                          <div>
-                            <p className="font-semibold text-lg">
-                              {verificationResult.match ? 'Voice Matched!' : 'Voice Not Recognized'}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Confidence: {(verificationResult.confidence * 100).toFixed(1)}%
-                            </p>
-                          </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-destructive/20 flex items-center justify-center">
+                          <XCircle className="w-6 h-6 text-destructive" />
                         </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-lg">
+                          {verificationResult.match ? 'Voice Matched!' : 'Voice Not Recognized'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Confidence: {(verificationResult.confidence * 100).toFixed(1)}%
+                        </p>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
 

@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
 import { extractMFCC, computeVoiceSignature, verifyVoice } from '@/lib/audio/mfcc';
-import { detectDeepfake, type DeepfakeAnalysis } from '@/lib/audio/deepfakeDetection';
 
 const SAMPLE_RATE = 16000;
 
@@ -9,7 +8,6 @@ interface VoiceRecorderState {
   isProcessing: boolean;
   audioLevel: number;
   error: string | null;
-  deepfakeAnalysis: DeepfakeAnalysis | null;
 }
 
 interface VoiceRecorderResult {
@@ -17,8 +15,7 @@ interface VoiceRecorderResult {
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<Float32Array | null>;
   extractSignature: (audioData: Float32Array) => number[];
-  verifyAgainst: (audioData: Float32Array, storedSignature: number[], threshold?: number) => { match: boolean; confidence: number; deepfakeAnalysis: DeepfakeAnalysis };
-  checkDeepfake: (audioData: Float32Array) => DeepfakeAnalysis;
+  verifyAgainst: (audioData: Float32Array, storedSignature: number[], threshold?: number) => { match: boolean; confidence: number };
 }
 
 export function useVoiceRecorder(): VoiceRecorderResult {
@@ -27,7 +24,6 @@ export function useVoiceRecorder(): VoiceRecorderResult {
     isProcessing: false,
     audioLevel: 0,
     error: null,
-    deepfakeAnalysis: null,
   });
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -156,38 +152,13 @@ export function useVoiceRecorder(): VoiceRecorderResult {
     return computeVoiceSignature(mfcc);
   }, []);
 
-  const checkDeepfake = useCallback((audioData: Float32Array): DeepfakeAnalysis => {
-    const analysis = detectDeepfake(audioData);
-    setState(prev => ({ ...prev, deepfakeAnalysis: analysis }));
-    return analysis;
-  }, []);
-
   const verifyAgainst = useCallback((
     audioData: Float32Array,
     storedSignature: number[],
     threshold: number = 0.85
   ) => {
-    // First check for deepfake
-    const deepfakeAnalysis = detectDeepfake(audioData);
-    setState(prev => ({ ...prev, deepfakeAnalysis }));
-    
-    // If deepfake detected, return failed verification
-    if (!deepfakeAnalysis.isHuman) {
-      return {
-        match: false,
-        confidence: 0,
-        deepfakeAnalysis,
-      };
-    }
-    
-    // Proceed with normal voice verification
     const mfcc = extractMFCC(audioData);
-    const result = verifyVoice(mfcc, storedSignature, threshold);
-    
-    return {
-      ...result,
-      deepfakeAnalysis,
-    };
+    return verifyVoice(mfcc, storedSignature, threshold);
   }, []);
 
   return {
@@ -196,6 +167,5 @@ export function useVoiceRecorder(): VoiceRecorderResult {
     stopRecording,
     extractSignature,
     verifyAgainst,
-    checkDeepfake,
   };
 }
