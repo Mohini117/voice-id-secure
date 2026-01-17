@@ -246,7 +246,7 @@ export default function Dashboard() {
         } else {
           toast({
             title: 'Voice not recognized',
-            description: `${remainingAttempts} attempt(s) remaining. Make sure to say: "${ENROLLMENT_PASSPHRASE}"`,
+            description: `${remainingAttempts} attempt(s) remaining. Make sure to say your voice password.`,
             variant: 'destructive',
           });
         }
@@ -371,47 +371,120 @@ export default function Dashboard() {
             <CardContent>
               {!isEnrolled ? (
                 <div className="space-y-6">
-                  {/* Passphrase Display */}
-                  <div className="p-4 rounded-xl bg-primary/10 border border-primary/30">
-                    <div className="flex items-start gap-3">
-                      <Quote className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">Your voice password:</p>
-                        <p className="text-lg font-semibold text-foreground">"{ENROLLMENT_PASSPHRASE}"</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Say this phrase clearly {REQUIRED_ENROLLMENT_SAMPLES} times. It will be your voice password.
-                        </p>
+                  {/* Passphrase Input */}
+                  {!passphraseConfirmed ? (
+                    <div className="space-y-4">
+                      <div className="p-4 rounded-xl bg-primary/10 border border-primary/30">
+                        <div className="flex items-start gap-3">
+                          <Edit3 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-sm text-muted-foreground mb-2">{PASSPHRASE_INSTRUCTIONS.enrollment}</p>
+                            <Input
+                              value={userPassphrase}
+                              onChange={(e) => setUserPassphrase(e.target.value)}
+                              placeholder="Enter your voice password..."
+                              className="mb-3"
+                            />
+                            <div className="flex flex-wrap gap-2">
+                              {SUGGESTED_PASSPHRASES.map((phrase, i) => (
+                                <Button
+                                  key={i}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setUserPassphrase(phrase)}
+                                  className="text-xs"
+                                >
+                                  {phrase}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Progress Indicators */}
-                  <div className="flex items-center justify-center gap-3 mb-6">
-                    {Array.from({ length: REQUIRED_ENROLLMENT_SAMPLES }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`relative w-4 h-4 rounded-full transition-all duration-300 ${
-                          i < enrollmentSamples.length
-                            ? 'bg-gradient-to-r from-primary to-accent shadow-lg'
-                            : 'bg-muted'
-                        }`}
+                      <Button
+                        onClick={() => {
+                          const wordCount = userPassphrase.trim().split(/\s+/).length;
+                          if (wordCount < MIN_PASSPHRASE_WORDS) {
+                            toast({
+                              title: 'Passphrase too short',
+                              description: `Use at least ${MIN_PASSPHRASE_WORDS} words.`,
+                              variant: 'destructive',
+                            });
+                            return;
+                          }
+                          if (wordCount > MAX_PASSPHRASE_WORDS) {
+                            toast({
+                              title: 'Passphrase too long',
+                              description: `Use at most ${MAX_PASSPHRASE_WORDS} words.`,
+                              variant: 'destructive',
+                            });
+                            return;
+                          }
+                          setPassphraseConfirmed(true);
+                        }}
+                        disabled={!userPassphrase.trim()}
+                        className="w-full"
                       >
-                        {i < enrollmentSamples.length && (
-                          <div className="absolute inset-0 rounded-full bg-primary animate-ping opacity-30" />
-                        )}
+                        Confirm Passphrase
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Passphrase Display */}
+                      <div className="p-4 rounded-xl bg-primary/10 border border-primary/30">
+                        <div className="flex items-start gap-3">
+                          <Quote className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Say this phrase clearly:</p>
+                            <p className="text-lg font-semibold text-foreground">"{userPassphrase}"</p>
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Record {REQUIRED_ENROLLMENT_SAMPLES} samples saying this exact phrase.
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                  
-                  <VoiceRecorder
-                    isRecording={recorderState.isRecording}
-                    isProcessing={recorderState.isProcessing || isEnrolling}
-                    audioLevel={recorderState.audioLevel}
-                    onStart={handleEnrollmentRecording}
-                    onStop={handleEnrollmentRecording}
-                    minDuration={MIN_PASSPHRASE_DURATION}
-                    maxDuration={MAX_PASSPHRASE_DURATION}
-                  />
+
+                      {/* Progress Indicators */}
+                      <div className="flex items-center justify-center gap-3 mb-6">
+                        {Array.from({ length: REQUIRED_ENROLLMENT_SAMPLES }).map((_, i) => (
+                          <div
+                            key={i}
+                            className={`relative w-4 h-4 rounded-full transition-all duration-300 ${
+                              i < enrollmentSamples.length
+                                ? 'bg-gradient-to-r from-primary to-accent shadow-lg'
+                                : 'bg-muted'
+                            }`}
+                          >
+                            {i < enrollmentSamples.length && (
+                              <div className="absolute inset-0 rounded-full bg-primary animate-ping opacity-30" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <VoiceRecorder
+                        isRecording={recorderState.isRecording}
+                        isProcessing={recorderState.isProcessing || isEnrolling}
+                        audioLevel={recorderState.audioLevel}
+                        onStart={handleEnrollmentRecording}
+                        onStop={handleEnrollmentRecording}
+                        minDuration={MIN_PASSPHRASE_DURATION}
+                        maxDuration={MAX_PASSPHRASE_DURATION}
+                      />
+                      
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPassphraseConfirmed(false);
+                          setEnrollmentSamples([]);
+                        }}
+                        className="w-full text-muted-foreground"
+                      >
+                        Change Passphrase
+                      </Button>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="text-center space-y-4 py-4">
@@ -451,7 +524,7 @@ export default function Dashboard() {
                     <Quote className="w-5 h-5 text-accent mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Say your voice password:</p>
-                      <p className="text-lg font-semibold text-foreground">"{ENROLLMENT_PASSPHRASE}"</p>
+                      <p className="text-lg font-semibold text-foreground">{PASSPHRASE_INSTRUCTIONS.verification}</p>
                     </div>
                   </div>
                 </div>
@@ -566,8 +639,8 @@ export default function Dashboard() {
                 <div className="text-sm">
                   <p className="font-medium text-foreground">Security Notice</p>
                   <p className="text-muted-foreground mt-1">
-                    Your voice password "{ENROLLMENT_PASSPHRASE}" is unique to you. 
-                    Only your voice saying this exact phrase will be accepted for verification.
+                    Your voice password is unique to you. 
+                    Only your voice saying your exact passphrase will be accepted for verification.
                     After {MAX_VERIFICATION_ATTEMPTS} failed attempts, you'll need to use OTP verification.
                   </p>
                 </div>
