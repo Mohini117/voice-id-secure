@@ -157,18 +157,27 @@ export default function Dashboard() {
       // Average all voice signatures
       const finalSignature = averageEnrollmentSignatures(samples);
 
+      const trimmedPassphrase = userPassphrase.trim();
+
       const { error } = await supabase
         .from('voice_profiles')
-        .upsert({
-          user_id: user.id,
-          azure_profile_id: serializeSignature(finalSignature),
-          enrollment_status: 'enrolled',
-          samples_collected: samples.length,
-        });
+        .upsert(
+          {
+            user_id: user.id,
+            azure_profile_id: serializeSignature(finalSignature),
+            enrollment_status: 'enrolled',
+            samples_collected: samples.length,
+          },
+          {
+            // user_id is unique in the backend, so we must upsert on it (otherwise enrollment can fail)
+            onConflict: 'user_id',
+          }
+        );
 
       if (error) throw error;
 
       setStoredSignature(finalSignature);
+      setStoredPassphrase(trimmedPassphrase);
       setVoiceProfile(prev => prev ? { ...prev, enrollment_status: 'enrolled' } : null);
       setEnrollmentSamples([]);
 
@@ -524,7 +533,9 @@ export default function Dashboard() {
                     <Quote className="w-5 h-5 text-accent mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Say your voice password:</p>
-                      <p className="text-lg font-semibold text-foreground">{PASSPHRASE_INSTRUCTIONS.verification}</p>
+                      <p className="text-lg font-semibold text-foreground">
+                        {storedPassphrase ? `"${storedPassphrase}"` : PASSPHRASE_INSTRUCTIONS.verification}
+                      </p>
                     </div>
                   </div>
                 </div>
