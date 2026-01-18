@@ -1,9 +1,9 @@
 /**
  * Neural Speaker Embedding using Hugging Face Transformers.js
- * Uses WavLM-based speaker verification model for robust voice authentication
+ * Uses WeSpeaker model for robust voice authentication
  */
 
-import { pipeline, env } from '@huggingface/transformers';
+import { AutoFeatureExtractor, AutoModelForXVector, env } from '@huggingface/transformers';
 
 // Configure transformers.js for browser
 env.allowLocalModels = false;
@@ -22,61 +22,76 @@ export interface VerificationResult {
   threshold: number;
 }
 
-// Singleton for the feature extraction pipeline
-let extractorPipeline: any = null;
+// Singleton for model and processor
+let featureExtractor: any = null;
+let model: any = null;
 let isLoading = false;
-let loadPromise: Promise<any> | null = null;
+let loadPromise: Promise<boolean> | null = null;
 
-// Model for speaker embeddings - using a lightweight model that works well in browser
-const MODEL_ID = 'Xenova/wavlm-base-plus-sv';
+// Using WeSpeaker model - specifically designed for speaker verification
+const MODEL_ID = 'Xenova/wespeaker-voxceleb-resnet34-LM';
 
 /**
  * Initialize the speaker embedding model
- * This will download the model on first use (~100MB)
+ * This will download the model on first use
  */
 export async function initializeSpeakerModel(
   onProgress?: (progress: { status: string; progress?: number }) => void
 ): Promise<boolean> {
-  if (extractorPipeline) return true;
+  if (model && featureExtractor) return true;
   
   if (isLoading && loadPromise) {
-    await loadPromise;
-    return !!extractorPipeline;
+    return loadPromise;
   }
 
   isLoading = true;
   
-  try {
-    onProgress?.({ status: 'loading', progress: 0 });
-    
-    loadPromise = pipeline('feature-extraction', MODEL_ID, {
-      progress_callback: (data: any) => {
-        if (data.status === 'progress' && data.progress) {
-          onProgress?.({ status: 'downloading', progress: data.progress });
-        }
-      },
-    });
-    
-    extractorPipeline = await loadPromise;
-    onProgress?.({ status: 'ready', progress: 100 });
-    
-    console.log('Speaker embedding model loaded successfully');
-    return true;
-  } catch (error) {
-    console.error('Failed to load speaker embedding model:', error);
-    onProgress?.({ status: 'error' });
-    return false;
-  } finally {
-    isLoading = false;
-    loadPromise = null;
-  }
+  loadPromise = (async () => {
+    try {
+      onProgress?.({ status: 'loading', progress: 0 });
+      
+      // Load feature extractor and model in parallel
+      const [loadedExtractor, loadedModel] = await Promise.all([
+        AutoFeatureExtractor.from_pretrained(MODEL_ID, {
+          progress_callback: (data: any) => {
+            if (data.status === 'progress' && data.progress) {
+              onProgress?.({ status: 'downloading extractor', progress: data.progress * 0.3 });
+            }
+          },
+        }),
+        AutoModelForXVector.from_pretrained(MODEL_ID, {
+          progress_callback: (data: any) => {
+            if (data.status === 'progress' && data.progress) {
+              onProgress?.({ status: 'downloading model', progress: 30 + data.progress * 0.7 });
+            }
+          },
+        }),
+      ]);
+      
+      featureExtractor = loadedExtractor;
+      model = loadedModel;
+      
+      onProgress?.({ status: 'ready', progress: 100 });
+      console.log('Speaker embedding model loaded successfully');
+      return true;
+    } catch (error) {
+      console.error('Failed to load speaker embedding model:', error);
+      onProgress?.({ status: 'error' });
+      return false;
+    } finally {
+      isLoading = false;
+      loadPromise = null;
+    }
+  })();
+  
+  return loadPromise;
 }
 
 /**
  * Check if model is loaded
  */
 export function isModelReady(): boolean {
-  return !!extractorPipeline;
+  return !!model && !!featureExtractor;
 }
 
 /**
@@ -87,7 +102,7 @@ export function isModelReady(): boolean {
 export async function extractSpeakerEmbedding(
   audioData: Float32Array
 ): Promise<SpeakerEmbedding | null> {
-  if (!extractorPipeline) {
+  if (!model || !featureExtractor) {
     console.error('Speaker model not initialized. Call initializeSpeakerModel first.');
     return null;
   }
@@ -105,51 +120,31 @@ export async function extractSpeakerEmbedding(
       ? new Float32Array(audioData.map(v => v / maxVal * 0.95))
       : audioData;
 
-    // Extract features using the model
-    const output = await extractorPipeline(normalizedAudio, {
+    // Process audio through the feature extractor
+    const inputs = await featureExtractor(normalizedAudio, {
       sampling_rate: 16000,
+      return_tensors: 'pt',
     });
 
-    // Get the embedding - take mean pooling across time dimension
+    // Run the model to get speaker embeddings
+    const outputs = await model(inputs);
+    
+    // Get the embedding from model output - WeSpeaker outputs embeddings directly
     let embedding: number[];
     
-    if (output.data) {
-      // Output is a tensor - need to process it
-      const data = Array.from(output.data as Float32Array);
-      const dims = output.dims;
-      
-      if (dims.length === 3) {
-        // Shape: [batch, time, features] - mean pool across time
-        const batchSize = dims[0];
-        const timeSteps = dims[1];
-        const features = dims[2];
-        
-        embedding = new Array(features).fill(0);
-        for (let t = 0; t < timeSteps; t++) {
-          for (let f = 0; f < features; f++) {
-            embedding[f] += data[t * features + f];
-          }
-        }
-        embedding = embedding.map(v => v / timeSteps);
-      } else if (dims.length === 2) {
-        // Shape: [time, features] - mean pool across time
-        const timeSteps = dims[0];
-        const features = dims[1];
-        
-        embedding = new Array(features).fill(0);
-        for (let t = 0; t < timeSteps; t++) {
-          for (let f = 0; f < features; f++) {
-            embedding[f] += data[t * features + f];
-          }
-        }
-        embedding = embedding.map(v => v / timeSteps);
-      } else {
-        // Already pooled or single vector
-        embedding = data;
-      }
+    if (outputs.embeddings) {
+      embedding = Array.from(outputs.embeddings.data as Float32Array);
+    } else if (outputs.logits) {
+      embedding = Array.from(outputs.logits.data as Float32Array);
     } else {
-      // Direct array output
-      embedding = Array.from(output);
+      // Try to get any available output
+      const outputKeys = Object.keys(outputs);
+      const firstOutput = outputs[outputKeys[0]];
+      if (firstOutput && firstOutput.data) {
+        embedding = Array.from(firstOutput.data as Float32Array);
+      } else {
+        throw new Error('Could not extract embedding from model output');
+      }
     }
 
     // L2 normalize the embedding
