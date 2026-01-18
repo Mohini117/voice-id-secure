@@ -6,28 +6,24 @@ import { Badge } from '@/components/ui/badge';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
 import { OTPInput } from '@/components/OTPInput';
 import { useAuth } from '@/hooks/useAuth';
-import { useNeuralVoice } from '@/hooks/useNeuralVoice';
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { 
-  serializeEmbedding,
-  deserializeEmbedding,
-  SpeakerEmbedding 
-} from '@/lib/audio/speakerEmbedding';
+  VoiceSignature, 
+  deserializeSignature, 
+  serializeSignature 
+} from '@/lib/audio/voiceSignature';
 import { 
+  ENROLLMENT_PASSPHRASE, 
   PASSPHRASE_INSTRUCTIONS,
   MIN_PASSPHRASE_DURATION,
   MAX_PASSPHRASE_DURATION,
-  REQUIRED_ENROLLMENT_SAMPLES,
-  SUGGESTED_PASSPHRASES,
-  MIN_PASSPHRASE_WORDS,
-  MAX_PASSPHRASE_WORDS
+  REQUIRED_ENROLLMENT_SAMPLES
 } from '@/lib/audio/passphrase';
-import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
 import { 
   Loader2, Fingerprint, Shield, CheckCircle2, XCircle, LogOut, Mic, 
-  User, Mail, Phone, RefreshCw, AlertTriangle, Quote, Edit3, Download
+  User, Mail, Phone, RefreshCw, AlertTriangle, Quote
 } from 'lucide-react';
 
 type VoiceProfile = {
@@ -49,33 +45,31 @@ export default function Dashboard() {
   const { user, loading, signOut } = useAuth();
   const { 
     state: recorderState, 
-    initializeModel,
     startRecording, 
     stopRecording, 
-    extractEmbedding,
-    verifyAgainst,
-    averageEmbeddings
-  } = useNeuralVoice();
+    extractFullSignature,
+    verifyAgainstStrict,
+    averageEnrollmentSignatures
+  } = useVoiceRecorder();
   const { toast } = useToast();
 
   const [voiceProfile, setVoiceProfile] = useState<VoiceProfile | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [storedEmbedding, setStoredEmbedding] = useState<SpeakerEmbedding | null>(null);
-  const [enrollmentSamples, setEnrollmentSamples] = useState<SpeakerEmbedding[]>([]);
+  const [storedSignature, setStoredSignature] = useState<VoiceSignature | null>(null);
+  const [enrollmentSamples, setEnrollmentSamples] = useState<VoiceSignature[]>([]);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState<{ 
     match: boolean; 
     confidence: number;
-    similarity?: number;
+    details?: {
+      meanSimilarity: number;
+      varianceSimilarity: number;
+    };
   } | null>(null);
   const [showOTP, setShowOTP] = useState(false);
   const [fetchingProfile, setFetchingProfile] = useState(true);
   const [verificationAttempts, setVerificationAttempts] = useState(0);
-  const [userPassphrase, setUserPassphrase] = useState('');
-  const [passphraseConfirmed, setPassphraseConfirmed] = useState(false);
-  const [storedPassphrase, setStoredPassphrase] = useState<string | null>(null);
-  const [modelInitialized, setModelInitialized] = useState(false);
 
   const MAX_VERIFICATION_ATTEMPTS = 3;
 
@@ -88,19 +82,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (user) {
       fetchProfiles();
-      // Initialize the neural model in background
-      initializeModel((progress) => {
-        console.log('Model loading:', progress);
-      }).then((success) => {
-        setModelInitialized(success);
-        if (!success) {
-          toast({
-            title: 'Model Loading Failed',
-            description: 'Voice authentication model could not be loaded. Please refresh.',
-            variant: 'destructive',
-          });
-        }
-      });
     }
   }, [user]);
 
@@ -126,9 +107,9 @@ export default function Dashboard() {
 
       if (voiceData) {
         setVoiceProfile(voiceData);
-        const emb = deserializeEmbedding(voiceData.azure_profile_id);
-        if (emb) {
-          setStoredEmbedding(emb);
+        const sig = deserializeSignature(voiceData.azure_profile_id);
+        if (sig) {
+          setStoredSignature(sig);
         }
       }
     } catch (error) {
@@ -141,93 +122,60 @@ export default function Dashboard() {
   const handleEnrollmentRecording = async () => {
     if (recorderState.isRecording) {
       const audioData = await stopRecording();
-      if (!audioData) {
+      if (!audioData) return;
+
+      // Extract full voice signature with variance and dynamics
+      const signature = extractFullSignature(audioData);
+      const newSamples = [...enrollmentSamples, signature];
+      setEnrollmentSamples(newSamples);
+
+      if (newSamples.length >= REQUIRED_ENROLLMENT_SAMPLES) {
+        await completeEnrollment(newSamples);
+      } else {
         toast({
-          title: 'Recording Error',
-          description: 'No audio captured. Please try again.',
-          variant: 'destructive',
+          title: `Sample ${newSamples.length}/${REQUIRED_ENROLLMENT_SAMPLES} recorded`,
+          description: `${REQUIRED_ENROLLMENT_SAMPLES - newSamples.length} more sample(s) needed. Say the same phrase again.`,
         });
-        return;
       }
-
-      // Extract neural speaker embedding
-      const embedding = await extractEmbedding(audioData);
-      if (!embedding) {
-        toast({
-          title: 'Processing Error',
-          description: 'Failed to extract voice features. Please try again.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      // Use functional update to ensure we get the latest state
-      setEnrollmentSamples(prevSamples => {
-        const newSamples = [...prevSamples, embedding];
-        console.log(`Sample ${newSamples.length}/${REQUIRED_ENROLLMENT_SAMPLES} collected`);
-
-        if (newSamples.length >= REQUIRED_ENROLLMENT_SAMPLES) {
-          // Complete enrollment with all samples
-          completeEnrollment(newSamples);
-        } else {
-          toast({
-            title: `Sample ${newSamples.length}/${REQUIRED_ENROLLMENT_SAMPLES} recorded`,
-            description: `${REQUIRED_ENROLLMENT_SAMPLES - newSamples.length} more sample(s) needed. Say the same phrase again.`,
-          });
-        }
-        
-        return newSamples;
-      });
     } else {
       await startRecording();
     }
   };
 
-  const completeEnrollment = async (samples: SpeakerEmbedding[]) => {
+  const completeEnrollment = async (samples: VoiceSignature[]) => {
     if (!user) return;
 
     setIsEnrolling(true);
 
     try {
-      // Average all neural embeddings
-      const finalEmbedding = averageEmbeddings(samples);
-      if (!finalEmbedding) {
-        throw new Error('Failed to compute average embedding');
-      }
-
-      const trimmedPassphrase = userPassphrase.trim();
+      // Average all voice signatures
+      const finalSignature = averageEnrollmentSignatures(samples);
 
       const { error } = await supabase
         .from('voice_profiles')
-        .upsert(
-          {
-            user_id: user.id,
-            azure_profile_id: serializeEmbedding(finalEmbedding),
-            enrollment_status: 'enrolled',
-            samples_collected: samples.length,
-          },
-          {
-            onConflict: 'user_id',
-          }
-        );
+        .upsert({
+          user_id: user.id,
+          azure_profile_id: serializeSignature(finalSignature),
+          enrollment_status: 'enrolled',
+          samples_collected: samples.length,
+        });
 
       if (error) throw error;
 
-      setStoredEmbedding(finalEmbedding);
-      setStoredPassphrase(trimmedPassphrase);
+      setStoredSignature(finalSignature);
       setVoiceProfile(prev => prev ? { ...prev, enrollment_status: 'enrolled' } : null);
       setEnrollmentSamples([]);
 
       await supabase.from('auth_logs').insert({
         user_id: user.id,
-        auth_method: 'voice_enrollment_neural',
+        auth_method: 'voice_enrollment',
         success: true,
         confidence_score: 1.0,
       });
 
       toast({
         title: 'Voice enrolled!',
-        description: 'Your neural voice profile has been created using AI. Remember your passphrase!',
+        description: 'Your voice profile has been created. Remember your passphrase!',
       });
 
       fetchProfiles();
@@ -244,13 +192,11 @@ export default function Dashboard() {
   };
 
   const handleReEnroll = () => {
-    setStoredEmbedding(null);
+    setStoredSignature(null);
     setEnrollmentSamples([]);
     setVoiceProfile(prev => prev ? { ...prev, enrollment_status: 'pending' } : null);
     setVerificationResult(null);
     setVerificationAttempts(0);
-    setPassphraseConfirmed(false);
-    setUserPassphrase('');
   };
 
   const handleVerificationRecording = async () => {
@@ -258,35 +204,19 @@ export default function Dashboard() {
       setIsVerifying(true);
       const audioData = await stopRecording();
       
-      if (!audioData || !storedEmbedding) {
+      if (!audioData || !storedSignature) {
         setIsVerifying(false);
         return;
       }
 
-      // Extract neural embedding from test audio
-      const testEmbedding = await extractEmbedding(audioData);
-      if (!testEmbedding) {
-        toast({
-          title: 'Processing Error',
-          description: 'Failed to extract voice features. Please try again.',
-          variant: 'destructive',
-        });
-        setIsVerifying(false);
-        return;
-      }
-
-      // Neural verification with threshold 0.75
-      const result = verifyAgainst(testEmbedding, storedEmbedding, 0.75);
-      setVerificationResult({
-        match: result.match,
-        confidence: result.confidence,
-        similarity: result.similarity,
-      });
+      // Use strict verification with full signature
+      const result = verifyAgainstStrict(audioData, storedSignature, 0.92);
+      setVerificationResult(result);
       setVerificationAttempts(prev => prev + 1);
 
       await supabase.from('auth_logs').insert({
         user_id: user?.id,
-        auth_method: 'voice_verification_neural',
+        auth_method: 'voice_verification',
         success: result.match,
         confidence_score: result.confidence,
       });
@@ -294,7 +224,7 @@ export default function Dashboard() {
       if (result.match) {
         toast({
           title: 'Voice verified!',
-          description: `Identity confirmed with ${(result.confidence * 100).toFixed(1)}% confidence (similarity: ${(result.similarity * 100).toFixed(1)}%).`,
+          description: `Identity confirmed with ${(result.confidence * 100).toFixed(1)}% confidence.`,
         });
         setVerificationAttempts(0);
       } else {
@@ -310,7 +240,7 @@ export default function Dashboard() {
         } else {
           toast({
             title: 'Voice not recognized',
-            description: `Similarity: ${(result.similarity * 100).toFixed(1)}%. ${remainingAttempts} attempt(s) remaining.`,
+            description: `${remainingAttempts} attempt(s) remaining. Make sure to say: "${ENROLLMENT_PASSPHRASE}"`,
             variant: 'destructive',
           });
         }
@@ -339,7 +269,7 @@ export default function Dashboard() {
     );
   }
 
-  const isEnrolled = voiceProfile?.enrollment_status === 'enrolled' && storedEmbedding;
+  const isEnrolled = voiceProfile?.enrollment_status === 'enrolled' && storedSignature;
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -362,7 +292,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gradient">VoiceAuth AI</h1>
+                <h1 className="text-xl font-bold text-gradient">VoiceAuth</h1>
                 <p className="text-sm text-muted-foreground">{profile?.full_name || user?.email}</p>
               </div>
             </Link>
@@ -375,24 +305,6 @@ export default function Dashboard() {
               <LogOut className="w-5 h-5" />
             </Button>
           </div>
-
-          {/* Model Loading Status */}
-          {recorderState.isModelLoading && (
-            <Card className="glass-card border-primary/30 bg-primary/5">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  <Download className="w-6 h-6 text-primary animate-pulse" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Loading AI Voice Model...</p>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      This may take a moment on first use
-                    </p>
-                    <Progress value={recorderState.modelProgress} className="h-2" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           {/* User Info Card */}
           <Card className="glass-card border-border/50">
@@ -422,7 +334,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="w-5 h-5 text-primary" />
-                  Neural Voice Profile
+                  Voice Profile
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   {isEnrolled && (
@@ -446,137 +358,54 @@ export default function Dashboard() {
               </div>
               <CardDescription>
                 {isEnrolled
-                  ? "Your AI-powered voice signature is ready for authentication."
+                  ? "Your voice signature is ready for authentication."
                   : `Record ${REQUIRED_ENROLLMENT_SAMPLES} voice samples saying the same passphrase.`}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {!isEnrolled ? (
                 <div className="space-y-6">
-                  {/* Model not ready warning */}
-                  {!modelInitialized && !recorderState.isModelLoading && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400">
-                      <AlertTriangle className="w-4 h-4" />
-                      <span className="text-sm">
-                        AI model not loaded. Please refresh the page.
-                      </span>
+                  {/* Passphrase Display */}
+                  <div className="p-4 rounded-xl bg-primary/10 border border-primary/30">
+                    <div className="flex items-start gap-3">
+                      <Quote className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">Your voice password:</p>
+                        <p className="text-lg font-semibold text-foreground">"{ENROLLMENT_PASSPHRASE}"</p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Say this phrase clearly {REQUIRED_ENROLLMENT_SAMPLES} times. It will be your voice password.
+                        </p>
+                      </div>
                     </div>
-                  )}
+                  </div>
 
-                  {/* Passphrase Input */}
-                  {!passphraseConfirmed ? (
-                    <div className="space-y-4">
-                      <div className="p-4 rounded-xl bg-primary/10 border border-primary/30">
-                        <div className="flex items-start gap-3">
-                          <Edit3 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                          <div className="flex-1">
-                            <p className="text-sm text-muted-foreground mb-2">{PASSPHRASE_INSTRUCTIONS.enrollment}</p>
-                            <Input
-                              value={userPassphrase}
-                              onChange={(e) => setUserPassphrase(e.target.value)}
-                              placeholder="Enter your voice password..."
-                              className="mb-3"
-                            />
-                            <div className="flex flex-wrap gap-2">
-                              {SUGGESTED_PASSPHRASES.map((phrase, i) => (
-                                <Button
-                                  key={i}
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setUserPassphrase(phrase)}
-                                  className="text-xs"
-                                >
-                                  {phrase}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <Button
-                        onClick={() => {
-                          const wordCount = userPassphrase.trim().split(/\s+/).length;
-                          if (wordCount < MIN_PASSPHRASE_WORDS) {
-                            toast({
-                              title: 'Passphrase too short',
-                              description: `Use at least ${MIN_PASSPHRASE_WORDS} words.`,
-                              variant: 'destructive',
-                            });
-                            return;
-                          }
-                          if (wordCount > MAX_PASSPHRASE_WORDS) {
-                            toast({
-                              title: 'Passphrase too long',
-                              description: `Use at most ${MAX_PASSPHRASE_WORDS} words.`,
-                              variant: 'destructive',
-                            });
-                            return;
-                          }
-                          setPassphraseConfirmed(true);
-                        }}
-                        disabled={!userPassphrase.trim() || !modelInitialized}
-                        className="w-full"
+                  {/* Progress Indicators */}
+                  <div className="flex items-center justify-center gap-3 mb-6">
+                    {Array.from({ length: REQUIRED_ENROLLMENT_SAMPLES }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`relative w-4 h-4 rounded-full transition-all duration-300 ${
+                          i < enrollmentSamples.length
+                            ? 'bg-gradient-to-r from-primary to-accent shadow-lg'
+                            : 'bg-muted'
+                        }`}
                       >
-                        Confirm Passphrase
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Passphrase Display */}
-                      <div className="p-4 rounded-xl bg-primary/10 border border-primary/30">
-                        <div className="flex items-start gap-3">
-                          <Quote className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Say this phrase clearly:</p>
-                            <p className="text-lg font-semibold text-foreground">"{userPassphrase}"</p>
-                            <p className="text-xs text-muted-foreground mt-2">
-                              Record {REQUIRED_ENROLLMENT_SAMPLES} samples saying this exact phrase.
-                            </p>
-                          </div>
-                        </div>
+                        {i < enrollmentSamples.length && (
+                          <div className="absolute inset-0 rounded-full bg-primary animate-ping opacity-30" />
+                        )}
                       </div>
-
-                      {/* Progress Indicators */}
-                      <div className="flex items-center justify-center gap-3 mb-6">
-                        {Array.from({ length: REQUIRED_ENROLLMENT_SAMPLES }).map((_, i) => (
-                          <div
-                            key={i}
-                            className={`relative w-4 h-4 rounded-full transition-all duration-300 ${
-                              i < enrollmentSamples.length
-                                ? 'bg-gradient-to-r from-primary to-accent shadow-lg'
-                                : 'bg-muted'
-                            }`}
-                          >
-                            {i < enrollmentSamples.length && (
-                              <div className="absolute inset-0 rounded-full bg-primary animate-ping opacity-30" />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <VoiceRecorder
-                        isRecording={recorderState.isRecording}
-                        isProcessing={recorderState.isProcessing || isEnrolling}
-                        audioLevel={recorderState.audioLevel}
-                        onStart={handleEnrollmentRecording}
-                        onStop={handleEnrollmentRecording}
-                        minDuration={MIN_PASSPHRASE_DURATION}
-                        maxDuration={MAX_PASSPHRASE_DURATION}
-                      />
-                      
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setPassphraseConfirmed(false);
-                          setEnrollmentSamples([]);
-                        }}
-                        className="w-full text-muted-foreground"
-                      >
-                        Change Passphrase
-                      </Button>
-                    </>
-                  )}
+                    ))}
+                  </div>
+                  
+                  <VoiceRecorder
+                    isRecording={recorderState.isRecording}
+                    isProcessing={recorderState.isProcessing || isEnrolling}
+                    audioLevel={recorderState.audioLevel}
+                    onStart={handleEnrollmentRecording}
+                    onStop={handleEnrollmentRecording}
+                    minDuration={MIN_PASSPHRASE_DURATION}
+                    maxDuration={MAX_PASSPHRASE_DURATION}
+                  />
                 </div>
               ) : (
                 <div className="text-center space-y-4 py-4">
@@ -587,9 +416,9 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div>
-                    <p className="text-foreground font-medium">Neural Voice Enrolled</p>
+                    <p className="text-foreground font-medium">Voice Enrolled</p>
                     <p className="text-sm text-muted-foreground">
-                      {voiceProfile?.samples_collected} samples collected with AI
+                      {voiceProfile?.samples_collected} samples collected
                     </p>
                   </div>
                 </div>
@@ -603,10 +432,10 @@ export default function Dashboard() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Mic className="w-5 h-5 text-secondary" />
-                  AI Voice Verification
+                  Voice Verification
                 </CardTitle>
                 <CardDescription>
-                  Say your voice password to verify your identity using neural AI.
+                  Say your voice password to verify your identity.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -616,9 +445,7 @@ export default function Dashboard() {
                     <Quote className="w-5 h-5 text-accent mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Say your voice password:</p>
-                      <p className="text-lg font-semibold text-foreground">
-                        {storedPassphrase ? `"${storedPassphrase}"` : PASSPHRASE_INSTRUCTIONS.verification}
-                      </p>
+                      <p className="text-lg font-semibold text-foreground">"{ENROLLMENT_PASSPHRASE}"</p>
                     </div>
                   </div>
                 </div>
@@ -666,9 +493,10 @@ export default function Dashboard() {
                         <p className="text-sm text-muted-foreground">
                           Confidence: {(verificationResult.confidence * 100).toFixed(1)}%
                         </p>
-                        {verificationResult.similarity !== undefined && (
+                        {!verificationResult.match && verificationResult.details && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            Similarity: {(verificationResult.similarity * 100).toFixed(1)}%
+                            Voice: {(verificationResult.details.meanSimilarity * 100).toFixed(0)}% | 
+                            Pattern: {(verificationResult.details.varianceSimilarity * 100).toFixed(0)}%
                           </p>
                         )}
                       </div>
@@ -730,10 +558,10 @@ export default function Dashboard() {
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <p className="font-medium text-foreground">AI-Powered Security</p>
+                  <p className="font-medium text-foreground">Security Notice</p>
                   <p className="text-muted-foreground mt-1">
-                    Your voice is analyzed using neural AI for maximum accuracy.
-                    Only your unique voice pattern will be accepted for verification.
+                    Your voice password "{ENROLLMENT_PASSPHRASE}" is unique to you. 
+                    Only your voice saying this exact phrase will be accepted for verification.
                     After {MAX_VERIFICATION_ATTEMPTS} failed attempts, you'll need to use OTP verification.
                   </p>
                 </div>

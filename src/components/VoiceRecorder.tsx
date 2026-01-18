@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -25,49 +25,27 @@ export function VoiceRecorder({
   maxDuration = 10,
 }: VoiceRecorderProps) {
   const [recordingTime, setRecordingTime] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const onStopRef = useRef(onStop);
 
   useEffect(() => {
-    onStopRef.current = onStop;
-  }, [onStop]);
-
-  useEffect(() => {
-    if (!isRecording) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      return;
+    let interval: NodeJS.Timeout;
+    
+    if (isRecording) {
+      setRecordingTime(0);
+      interval = setInterval(() => {
+        setRecordingTime(prev => {
+          if (prev >= maxDuration) {
+            onStop();
+            return prev;
+          }
+          return prev + 0.1;
+        });
+      }, 100);
     }
-
-    setRecordingTime(0);
-
-    intervalRef.current = setInterval(() => {
-      setRecordingTime((prev) => {
-        const next = Math.min(prev + 0.1, maxDuration);
-        if (next >= maxDuration && intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        return next;
-      });
-    }, 100);
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      if (interval) clearInterval(interval);
     };
-  }, [isRecording, maxDuration]);
-
-  // Auto-stop safely (after render) when max duration is reached
-  useEffect(() => {
-    if (isRecording && recordingTime >= maxDuration) {
-      onStopRef.current();
-    }
-  }, [isRecording, recordingTime, maxDuration]);
+  }, [isRecording, maxDuration, onStop]);
 
   const handleClick = () => {
     if (isProcessing) return;
