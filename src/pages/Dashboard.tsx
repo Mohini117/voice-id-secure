@@ -141,7 +141,14 @@ export default function Dashboard() {
   const handleEnrollmentRecording = async () => {
     if (recorderState.isRecording) {
       const audioData = await stopRecording();
-      if (!audioData) return;
+      if (!audioData) {
+        toast({
+          title: 'Recording Error',
+          description: 'No audio captured. Please try again.',
+          variant: 'destructive',
+        });
+        return;
+      }
 
       // Extract neural speaker embedding
       const embedding = await extractEmbedding(audioData);
@@ -154,17 +161,23 @@ export default function Dashboard() {
         return;
       }
 
-      const newSamples = [...enrollmentSamples, embedding];
-      setEnrollmentSamples(newSamples);
+      // Use functional update to ensure we get the latest state
+      setEnrollmentSamples(prevSamples => {
+        const newSamples = [...prevSamples, embedding];
+        console.log(`Sample ${newSamples.length}/${REQUIRED_ENROLLMENT_SAMPLES} collected`);
 
-      if (newSamples.length >= REQUIRED_ENROLLMENT_SAMPLES) {
-        await completeEnrollment(newSamples);
-      } else {
-        toast({
-          title: `Sample ${newSamples.length}/${REQUIRED_ENROLLMENT_SAMPLES} recorded`,
-          description: `${REQUIRED_ENROLLMENT_SAMPLES - newSamples.length} more sample(s) needed. Say the same phrase again.`,
-        });
-      }
+        if (newSamples.length >= REQUIRED_ENROLLMENT_SAMPLES) {
+          // Complete enrollment with all samples
+          completeEnrollment(newSamples);
+        } else {
+          toast({
+            title: `Sample ${newSamples.length}/${REQUIRED_ENROLLMENT_SAMPLES} recorded`,
+            description: `${REQUIRED_ENROLLMENT_SAMPLES - newSamples.length} more sample(s) needed. Say the same phrase again.`,
+          });
+        }
+        
+        return newSamples;
+      });
     } else {
       await startRecording();
     }
